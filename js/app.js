@@ -12,6 +12,7 @@ import * as timerView from './views/timer.js';
 import * as progress from './views/progress.js';
 import * as settings from './views/settings.js';
 import * as library from './views/library.js';
+import * as body from './views/body.js';
 import { seedTemplates } from './templates.js';
 
 const routes = [
@@ -25,6 +26,7 @@ const routes = [
   { re: /^\/exercise\/(.+)$/, view: progress, sub: 'exercise', tab: 'progress' },
   { re: /^\/session\/([^/]+)$/, view: progress, sub: 'session', tab: 'progress' },
   { re: /^\/muscles$/, view: progress, sub: 'muscles', tab: 'progress' },
+  { re: /^\/body$/, view: body, tab: 'progress' },
   { re: /^\/settings$/, view: settings, tab: 'settings' },
   { re: /^\/library$/, view: library, tab: 'settings' },
   { re: /^\/templates$/, view: library, sub: 'templates', tab: 'plans' },

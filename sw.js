@@ -1,6 +1,6 @@
 // Service Worker: App-Shell offline verfügbar machen.
 // Bei jeder Änderung an den App-Dateien VERSION erhöhen, damit Clients aktualisieren.
-const VERSION = 'hantel-v1.2.0';
+const VERSION = 'hantel-v1.3.0';
 const SHELL = [
   './',
   './index.html',
@@ -22,6 +22,7 @@ const SHELL = [
   './js/views/settings.js',
   './js/views/exercise-info.js',
   './js/views/library.js',
+  './js/views/body.js',
   './js/figure.js',
   './js/exercise-db.js',
   './js/templates.js',

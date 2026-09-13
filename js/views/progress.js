@@ -1,7 +1,7 @@
 // Fortschritt: Übersicht, Übungsanalyse (Kennzahlen/Zeiträume/Rekorde), Session-Detail, Muskelgruppen-Dashboard
-import { h, svg, svgIcon, fmtDuration, fmtDurationLong, fmtDate, fmtShortDate, fmtWeight, fmtNum, dateParts, weekKey, confirmSheet, toast, promptSheet } from '../util.js';
-import { getSessions, getSession, deleteSession, updateSession, exerciseIndex, exerciseHistory, entryBest, sessionVolume, getSettings, e1rm } from '../store.js';
-import { prBaseline, sessionPRs, fmtKg, PR_LABELS } from '../progression.js';
+import { h, svg, svgIcon, fmtDuration, fmtDurationLong, fmtDate, fmtShortDate, fmtWeight, fmtNum, dateParts, weekKey, confirmSheet, toast, promptSheet, openSheet, parseNum } from '../util.js';
+import { getSessions, getSession, deleteSession, updateSession, exerciseIndex, exerciseHistory, entryBest, sessionVolume, getSettings, getBodyLog } from '../store.js';
+import { prBaseline, sessionPRs, fmtKg, PR_LABELS, percentTable, inferWeightStep } from '../progression.js';
 import { MUSCLES, MUSCLE_NAME, muscleSets, sessionsInWeek, muscleWeekStats, bodyMapSvg, intensityColor, ratioFor } from '../muscles.js';
 
 export function render(root, ctx) {
@@ -53,6 +53,23 @@ function renderOverview(root, { navigate }) {
     ]),
   ]));
 
+  // Körpergewicht
+  const body = getBodyLog();
+  const lastBody = [...body].reverse().find(e => e.weight != null);
+  root.append(h('div.card.tappable', { onclick: () => navigate('/body'), style: { marginTop: '10px' } }, [
+    h('div.row.between', {}, [
+      h('div.grow', {}, [
+        h('div', { text: '⚖️ Gewicht & Maße', style: { fontWeight: 700 } }),
+        h('div.small.faint', { text: lastBody ? `Zuletzt ${String(lastBody.weight).replace('.', ',')} kg · ${fmtShortDate(lastBody.date)}` : 'Körpergewicht und Umfänge protokollieren' }),
+      ]),
+      h('div', { html: svgIcon.chevron }),
+    ]),
+  ]));
+
+  // Trainingskalender
+  root.append(h('div.subhead', {}, [h('h2', { text: 'Trainingskalender' })]));
+  root.append(h('div.card', {}, [heatmap(sessions, 20, navigate)]));
+
   root.append(h('div.subhead', {}, [h('h2', { text: 'Workouts pro Woche' })]));
   root.append(h('div.card', {}, [weeklyBarChart(sessions, 12)]));
 
@@ -93,6 +110,39 @@ function sessionRow(s, settings, navigate) {
       h('div.meta', { text: `${fmtDurationLong(s.durationSec)} · ${s.entries.length} Übungen · ${sets} Sätze · ${fmtNum(sessionVolume(s))} ${settings.unit}` }),
     ]),
     h('div', { html: svgIcon.chevron }),
+  ]);
+}
+
+/** GitHub-Style Kalender: eine Spalte pro Woche (Mo–So), letzte `weeks` Wochen */
+function heatmap(sessions, weeks, navigate) {
+  const byDay = new Map();
+  for (const s of sessions) {
+    const d = new Date(s.startedAt); d.setHours(0, 0, 0, 0);
+    const k = d.getTime();
+    byDay.set(k, (byDay.get(k) || []).concat(s));
+  }
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = weekKey(today.getTime()) - (weeks - 1) * 7 * 86400000;
+  const grid = h('div.heatmap');
+  const months = [];
+  for (let wk = 0; wk < weeks; wk++) {
+    for (let d = 0; d < 7; d++) {
+      const t = start + (wk * 7 + d) * 86400000;
+      const list = byDay.get(t) || [];
+      const vol = list.reduce((a, s) => a + sessionVolume(s), 0);
+      const lvl = !list.length ? 0 : vol < 4000 ? 1 : vol < 9000 ? 2 : 3;
+      const cell = h('i', { class: (lvl ? 'l' + lvl : '') + (t === today.getTime() ? ' today' : ''), title: `${fmtDate(t)}${list.length ? ` · ${list.map(s => s.planName).join(', ')}` : ''}` });
+      if (t > today.getTime()) cell.style.visibility = 'hidden';
+      if (list.length) cell.addEventListener('click', () => navigate('/session/' + list[0].id));
+      grid.append(cell);
+      if (d === 0) { const m = new Date(t); if (m.getDate() <= 7) months.push(['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'][m.getMonth()]); else months.push(''); }
+    }
+  }
+  const streak = weekStreak(sessions);
+  return h('div', {}, [
+    h('div.heatmap-wrap', {}, [grid]),
+    h('div.heatmap-months', {}, months.map(m => h('span', { text: m }))),
+    h('div.small.faint', { style: { marginTop: '6px' }, text: `${weeks} Wochen · ${sessions.filter(s => s.startedAt >= start).length} Workouts · Serie: ${streak} Woche${streak === 1 ? '' : 'n'} in Folge` }),
   ]);
 }
 
@@ -216,6 +266,20 @@ function renderExercise(root, { params, navigate }) {
   if (repsRows.length) recs.append(prRow('🔁 Meiste Wiederholungen je Gewicht', '', repsRows.map(([w, r]) => `${fmtKg(w)}: ${r.reps} Wdh`).join(' · ')));
   root.append(recs);
 
+  // 1RM-/Prozent-Tabelle
+  if (base.e1rm) {
+    const step = inferWeightStep(name);
+    const rows = percentTable(base.e1rm.value, step);
+    const det = h('details.raw', {}, [
+      h('summary', { text: `Prozent-Tabelle (aus e1RM ${fmtKg(Math.round(base.e1rm.value))})` }),
+      h('div.card.tbl-wrap', { style: { marginTop: '8px' } }, [h('table.tbl.pct-table', {}, [
+        h('thead', {}, [h('tr', {}, [h('th', { text: '% 1RM' }), h('th.num', { text: 'Gewicht' }), h('th.num', { text: '≈ Wdh' })])]),
+        h('tbody', {}, rows.map(r => h('tr', {}, [h('td', { text: `${r.pct} %` }), h('td.num', { text: fmtKg(r.weight) }), h('td.num', { text: String(r.reps) })]))),
+      ])]),
+    ]);
+    root.append(det);
+  }
+
   // Alle Einheiten
   root.append(h('div.subhead', {}, [h('h2', { text: 'Alle Einheiten' })]));
   const tbl = h('table.tbl', {}, [h('thead', {}, [h('tr', {}, [h('th', { text: 'Datum' }), h('th', { text: 'Sätze' }), h('th.num', { text: 'e1RM' })])])]);
@@ -274,7 +338,7 @@ function renderSession(root, { params, query, navigate }) {
     ]))));
   }
 
-  root.append(h('div.subhead', {}, [h('h2', { text: 'Übungen' })]));
+  root.append(h('div.subhead', {}, [h('h2', { text: 'Übungen' }), h('button.btn.sm.ghost', { text: 'Bearbeiten', onclick: () => editSession(s, navigate) })]));
   const card = h('div.card');
   s.entries.forEach((e, i) => {
     const b = entryBest(e);
@@ -282,7 +346,7 @@ function renderSession(root, { params, query, navigate }) {
       h('div.idx', { text: i + 1 }),
       h('div.grow', {}, [
         h('div', { text: e.name, style: { fontWeight: 600 } }),
-        h('div.target', { text: e.sets.map(s => `${s.weight ?? '–'}×${s.reps ?? '–'}`).join(' · ') }),
+        h('div.target', { text: e.sets.map(s => `${s.weight ?? '–'}×${s.reps ?? '–'}` + (s.rir != null ? ` (RIR ${s.rir})` : '')).join(' · ') }),
         h('div.small.faint', { text: `Volumen ${fmtNum(b.volume)} ${settings.unit} · Best ${fmtWeight(b.maxWeight, settings.unit)} · e1RM ${fmtWeight(Math.round(b.e1rm), settings.unit)}` }),
       ]),
       h('div', { html: svgIcon.chevron }),
@@ -302,6 +366,47 @@ function renderSession(root, { params, query, navigate }) {
       deleteSession(s.id); toast('Workout gelöscht'); navigate('/progress', true);
     }
   } }));
+}
+
+/** Vergangene Session korrigieren: Gewicht/Wdh je Satz, Sätze hinzufügen/entfernen */
+function editSession(s, navigate) {
+  const draft = s.entries.map(e => ({ ...e, sets: e.sets.map(x => ({ ...x })) }));
+  openSheet((sheet, close) => {
+    const list = h('div.stack');
+    const drawList = () => {
+      list.innerHTML = '';
+      draft.forEach((e) => {
+        const box = h('div.card', { style: { padding: '10px 12px' } }, [h('div', { text: e.name, style: { fontWeight: 700, marginBottom: '6px' } })]);
+        box.append(h('div.edit-set', { style: { fontSize: '11px', color: 'var(--text-3)', fontWeight: 700 } }, [h('span', { text: '#' }), h('span', { text: 'kg' }), h('span', { text: 'Wdh' }), h('span')]));
+        e.sets.forEach((set, si) => {
+          const wIn = h('input.input.num', { type: 'text', inputmode: 'decimal', value: set.weight ?? '' });
+          const rIn = h('input.input.num', { type: 'text', inputmode: 'numeric', value: set.reps ?? '' });
+          wIn.addEventListener('input', () => { set.weight = parseNum(wIn.value); });
+          rIn.addEventListener('input', () => { set.reps = parseNum(rIn.value); });
+          box.append(h('div.edit-set', {}, [
+            h('span.mono.faint', { text: String(si + 1) }), wIn, rIn,
+            h('button.btn.icon.ghost', { html: svgIcon.trash, 'aria-label': 'Satz entfernen', style: { width: '40px', minHeight: '40px' }, onclick: () => { e.sets.splice(si, 1); drawList(); } }),
+          ]));
+        });
+        box.append(h('button.btn.sm.ghost', { text: '+ Satz', style: { marginTop: '6px' }, onclick: () => { const p = e.sets[e.sets.length - 1]; e.sets.push({ weight: p?.weight ?? null, reps: p?.reps ?? null, done: true }); drawList(); } }));
+        list.append(box);
+      });
+    };
+    drawList();
+    sheet.append(
+      h('h2', { text: 'Workout bearbeiten' }),
+      h('p.small.muted.mb', { text: 'Korrekturen wirken auf Rekorde, Progression und Statistik.' }),
+      list,
+      h('div.actions', {}, [
+        h('button.btn.ghost', { text: 'Abbrechen', onclick: close }),
+        h('button.btn.primary', { text: 'Speichern', onclick: () => {
+          const entries = draft.map(e => ({ ...e, sets: e.sets.filter(x => x.weight != null || x.reps != null) })).filter(e => e.sets.length);
+          updateSession(s.id, { entries });
+          close(); toast('Workout aktualisiert'); navigate('/session/' + s.id, true);
+        } }),
+      ]),
+    );
+  });
 }
 
 // ---------- Muskelgruppen-Dashboard ----------

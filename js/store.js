@@ -13,6 +13,9 @@ const DEFAULT_SETTINGS = {
   unit: 'kg',
   apiKey: '',
   aiModel: 'claude-opus-5',
+  barWeight: 20,        // Standard-Stangengewicht für den Scheibenrechner
+  keepAliveAudio: true, // Pausentimer bei gesperrtem Bildschirm (lautloses Audio)
+  warmupSets: true,     // Aufwärmsätze im Training vorschlagen
 };
 
 const state = {
@@ -20,6 +23,8 @@ const state = {
   sessions: [],
   activeWorkout: null,
   settings: { ...DEFAULT_SETTINGS },
+  exerciseSettings: {}, // je Übung (normalisierter Name): { setup, barWeight }
+  body: [],             // Körpergewicht/Maße: { id, date, weight, waist, chest, arm, thigh, note }
 };
 
 const listeners = new Set();
@@ -38,6 +43,8 @@ export function load() {
       state.sessions = data.sessions || [];
       state.activeWorkout = data.activeWorkout || null;
       state.settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+      state.exerciseSettings = data.exerciseSettings || {};
+      state.body = data.body || [];
     }
   } catch (e) {
     console.error('Konnte Daten nicht laden', e);
@@ -54,6 +61,8 @@ export function save(immediate = false) {
         sessions: state.sessions,
         activeWorkout: state.activeWorkout,
         settings: state.settings,
+        exerciseSettings: state.exerciseSettings,
+        body: state.body,
         savedAt: Date.now(),
       }));
     } catch (e) {
@@ -176,6 +185,8 @@ export function startWorkout(planId) {
       weightStep: weightStepFor(ex),
       restSec: ex.restSec || state.settings.defaultRestSec,
       note: ex.note || '',
+      superset: !!ex.superset, // bildet mit der nächsten Übung einen Supersatz
+      warmup: null,            // Aufwärmsätze werden beim ersten Öffnen erzeugt
       sets,
     };
   });
@@ -327,16 +338,50 @@ export function detectPRs(session) {
   return prs;
 }
 
+// ---------- Übungs-Einstellungen (Maschine, Stange) ----------
+
+export function getExerciseSettings(name) {
+  return state.exerciseSettings[normalizeName(name)] || {};
+}
+
+export function updateExerciseSettings(name, patch) {
+  const key = normalizeName(name);
+  state.exerciseSettings[key] = { ...(state.exerciseSettings[key] || {}), ...patch };
+  save();
+  return state.exerciseSettings[key];
+}
+
+// ---------- Körpergewicht / Maße ----------
+
+export function getBodyLog() { return state.body; }
+
+export function addBodyEntry(entry) {
+  const e = { id: uid(), date: Date.now(), ...entry };
+  state.body.push(e);
+  state.body.sort((a, b) => a.date - b.date);
+  save();
+  emit('body');
+  return e;
+}
+
+export function deleteBodyEntry(id) {
+  state.body = state.body.filter(e => e.id !== id);
+  save();
+  emit('body');
+}
+
 // ---------- Export / Import ----------
 
 export function exportJSON() {
   return JSON.stringify({
     app: 'hantel',
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     plans: state.plans,
     sessions: state.sessions,
     settings: { ...state.settings, apiKey: '' }, // API-Key nie exportieren
+    exerciseSettings: state.exerciseSettings,
+    body: state.body,
   }, null, 2);
 }
 
@@ -357,8 +402,14 @@ export function importJSON(text, { merge = true } = {}) {
     const { apiKey, ...rest } = data.settings;
     Object.assign(state.settings, rest);
   }
+  if (data.exerciseSettings) Object.assign(state.exerciseSettings, data.exerciseSettings);
+  if (Array.isArray(data.body)) {
+    const ids = new Set(state.body.map(b => b.id));
+    for (const b of data.body) if (!ids.has(b.id)) state.body.push(b);
+    state.body.sort((a, b) => a.date - b.date);
+  }
   save(true);
-  emit('plans'); emit('sessions'); emit('settings');
+  emit('plans'); emit('sessions'); emit('settings'); emit('body');
   return { plans, sessions };
 }
 
@@ -366,6 +417,8 @@ export function resetAll() {
   state.plans = [];
   state.sessions = [];
   state.activeWorkout = null;
+  state.exerciseSettings = {};
+  state.body = [];
   state.settings = { ...DEFAULT_SETTINGS };
   save(true);
   emit('plans'); emit('sessions'); emit('settings'); emit('workout');

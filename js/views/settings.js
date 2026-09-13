@@ -3,7 +3,7 @@ import { h, svgIcon, toast, confirmSheet, download } from '../util.js';
 import { getSettings, updateSettings, exportJSON, importJSON, resetAll, getSessions, getPlans } from '../store.js';
 import { testApiKey } from '../ai-import.js';
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 
 const MODELS = [
   ['claude-opus-5', 'Claude Opus 5 – beste Erkennung (Standard)'],
@@ -29,6 +29,12 @@ export function render(root) {
       h('div', { html: svgIcon.chevron }),
     ]),
   ]));
+  root.append(h('div.card.tappable', { onclick: () => { location.hash = '#/body'; } }, [
+    h('div.row.between', {}, [
+      h('div', {}, [h('div', { text: '⚖️ Gewicht & Maße', style: { fontWeight: 700 } }), h('div.small.faint', { text: 'Körpergewicht und Umfänge mit Verlauf' })]),
+      h('div', { html: svgIcon.chevron }),
+    ]),
+  ]));
 
   // ---------- Training ----------
   root.append(h('div.subhead', {}, [h('h2', { text: 'Training' })]));
@@ -39,9 +45,16 @@ export function render(root) {
     updateSettings({ unit: u }); for (const b of e.target.parentNode.children) b.classList.toggle('active', b.textContent === u);
   } })));
 
+  const barSeg = h('div.seg', { style: { width: '150px' } }, [20, 15, 10].map(b => h('button', { text: `${b}`, class: s.barWeight === b ? 'active' : '', onclick: (e) => {
+    updateSettings({ barWeight: b }); for (const x of e.target.parentNode.children) x.classList.toggle('active', x.textContent === String(b));
+  } })));
+
   root.append(h('div.card', {}, [
     switchRow('Standard-Pause', 'Sekunden zwischen Sätzen, falls die Übung keine eigene Pause hat', rest),
     switchRow('Pausentimer automatisch', 'Startet nach jedem abgehakten Satz', toggle('autoRestTimer')),
+    switchRow('Timer bei gesperrtem Bildschirm', 'Hält per lautlosem Audio die Verbindung – der Beep klingelt auch, wenn das Display aus ist', toggle('keepAliveAudio')),
+    switchRow('Aufwärmsätze vorschlagen', '40 % × 10, 60 % × 6, 80 % × 3 vom Arbeitsgewicht (eingeklappt über Satz 1)', toggle('warmupSets')),
+    switchRow('Stangengewicht', 'Standard für den Scheibenrechner (kg), pro Übung änderbar', barSeg),
     switchRow('Ton', 'Signal, wenn die Pause vorbei ist', toggle('sound')),
     switchRow('Vibration', 'Wird auf iPhones von Safari leider nicht unterstützt', toggle('vibrate')),
     switchRow('Bildschirm an lassen', 'Während Workout und Timer (Wake Lock)', toggle('wakeLock')),

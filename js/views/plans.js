@@ -30,6 +30,26 @@ export function render(root, { navigate }) {
       ]));
     }
 
+    // „Heute dran“: nächster Plan in der Rotation (nach dem zuletzt trainierten)
+    if (!active && plans.length) {
+      const sessions = getSessions();
+      const lastSession = sessions[sessions.length - 1];
+      const lastIdx = lastSession ? plans.findIndex(p => p.id === lastSession.planId) : -1;
+      const nextPlan = plans[(lastIdx + 1) % plans.length];
+      const nextLast = [...sessions].reverse().find(s => s.planId === nextPlan.id);
+      const daysSince = lastSession ? Math.floor((Date.now() - lastSession.startedAt) / 86400000) : null;
+      root.append(h('div.hero', {}, [
+        h('div.eyebrow', { text: 'Heute dran' }),
+        h('h2', { text: nextPlan.name }),
+        h('div.meta', { text: [
+          `${nextPlan.exercises.length} Übungen`,
+          nextLast ? `dieser Plan zuletzt ${lc(relativeDay(nextLast.startedAt))}` : 'noch nie trainiert',
+          lastSession ? `letztes Training: ${lastSession.planName} · ${daysSince === 0 ? 'heute' : daysSince === 1 ? 'gestern' : `vor ${daysSince} Tagen`}` : null,
+        ].filter(Boolean).join(' · ') }),
+        h('button.btn.primary.block', { html: svgIcon.play + '<span>Training starten</span>', onclick: () => navigate('/plan/' + nextPlan.id + '?start=1') }),
+      ]));
+    }
+
     if (!plans.length) {
       root.append(h('div.empty', {}, [
         h('div.icon', { text: '🏋️' }),
@@ -47,7 +67,7 @@ export function render(root, { navigate }) {
       for (const p of plans) {
         const last = [...sessions].reverse().find(s => s.planId === p.id);
         const meta = [`${p.exercises.length} Übung${p.exercises.length === 1 ? '' : 'en'}`];
-        if (last) meta.push('zuletzt ' + relativeDay(last.startedAt).toLowerCase());
+        if (last) meta.push('zuletzt ' + lc(relativeDay(last.startedAt)));
         const card = h('div.card.tappable.plan-card', { onclick: () => navigate('/plan/' + p.id) }, [
           h('div.swatch', { style: { background: colorFor(p) } }),
           h('div.grow', {}, [
@@ -94,6 +114,9 @@ export function render(root, { navigate }) {
 }
 
 export function unmount() { unsub?.(); unsub = null; }
+
+// „Heute“/„Gestern“ klein im Satz, Datumsangaben unverändert
+const lc = (s) => s.replace(/^(Heute|Gestern)/, (m) => m.toLowerCase());
 
 const PALETTE = ['#ff5c35', '#3ddc84', '#4f8cff', '#ffc857', '#b26bff', '#2ad4c6'];
 export function colorFor(plan) {

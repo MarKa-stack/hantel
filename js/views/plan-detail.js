@@ -54,7 +54,7 @@ export function render(root, { params, query, navigate }) {
   const card = h('div.card');
   plan.exercises.forEach((ex, i) => {
     const last = lastPerformance(ex.name);
-    const target = `${ex.sets} × ${ex.reps}` + (ex.weight != null ? ` @ ${fmtWeight(ex.weight, settings.unit)}` : '') + ` · ${ex.restSec || settings.defaultRestSec}s Pause`;
+    const target = `${ex.sets} × ${ex.reps}` + (ex.weight != null ? ` @ ${fmtWeight(ex.weight, settings.unit)}` : '') + ` · ${ex.restSec || settings.defaultRestSec}s Pause` + (ex.superset && plan.exercises[i + 1] ? ` · ⇅ Supersatz mit ${plan.exercises[i + 1].name}` : '');
     const thumb = figureThumb(ex.name);
     card.append(h('div.ex-row', { onclick: () => openExerciseInfo(ex.name, { note: ex.note, target }), style: { cursor: 'pointer' } }, [
       thumb || h('div.idx', { text: i + 1 }),

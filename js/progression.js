@@ -103,6 +103,14 @@ export function recommend(exercise, opts = {}) {
       status: 'increase', message: `Zielbereich vollständig erreicht (${targetSets} × ${range.max}). Nächste Stufe: +${fmtKg(step)}.`,
     };
   }
+  // RIR-Schärfung: alle Sätze im Zielbereich UND überall RIR ≥ 3 protokolliert → das Gewicht war zu leicht
+  const allInRangeEasy = setsAtW.length >= targetSets && setsAtW.every(s => Number(s.reps) >= range.min && s.rir != null && Number(s.rir) >= 3);
+  if (allInRangeEasy) {
+    return {
+      weight: w + step, reps: range, step, last, decline: false,
+      status: 'increase', message: `Zielbereich mit RIR ≥ 3 erreicht – das Gewicht war zu leicht. Nächste Stufe: +${fmtKg(step)}.`,
+    };
+  }
   const anyBelowMin = setsAtW.some(s => Number(s.reps) < range.min);
   return {
     weight: w, reps: range, step, last, decline,
@@ -188,6 +196,57 @@ export function sessionPRs(session) {
     if (vol > 0 && base.sessionVolume && vol > base.sessionVolume.value) out.push({ name: e.name, type: 'volume', value: vol, prev: base.sessionVolume.value });
   }
   return out;
+}
+
+// ---------- Aufwärmsätze ----------
+
+/**
+ * Aufwärmsätze aus dem Arbeitsgewicht: 40 % × 10, 60 % × 6, 80 % × 3 (auf den Gewichtsschritt gerundet).
+ * Unter 20 kg Arbeitsgewicht nur ein leichter Satz.
+ */
+export function warmupSets(workWeight, step = 2.5) {
+  const w = Number(workWeight);
+  if (!w || w < 20) return w ? [{ weight: roundToStep(w * 0.5, step), reps: 10 }] : [];
+  const round = (x) => Math.max(step, roundToStep(x, step));
+  const out = [
+    { weight: round(w * 0.4), reps: 10 },
+    { weight: round(w * 0.6), reps: 6 },
+    { weight: round(w * 0.8), reps: 3 },
+  ];
+  // Doppelte Stufen (bei kleinen Gewichten) zusammenfassen
+  return out.filter((s, i) => i === 0 || s.weight > out[i - 1].weight);
+}
+
+// ---------- Scheibenrechner ----------
+
+export const PLATES = [25, 20, 15, 10, 5, 2.5, 1.25, 0.5];
+
+/**
+ * Scheiben pro Seite für ein Zielgewicht.
+ * @returns {{ perSide:number[], total:number, exact:boolean, remainder:number }}
+ */
+export function platesFor(target, barWeight = 20, plates = PLATES) {
+  const t = Number(target) || 0;
+  let rest = Math.max(0, (t - barWeight) / 2);
+  const perSide = [];
+  for (const p of plates) {
+    while (rest >= p - 1e-9) { perSide.push(p); rest -= p; }
+  }
+  const loaded = barWeight + perSide.reduce((a, p) => a + p, 0) * 2;
+  return { perSide, total: loaded, exact: Math.abs(loaded - t) < 1e-9, remainder: Math.round((t - loaded) * 100) / 100 };
+}
+
+/** Prozent-Tabelle aus dem e1RM (50–100 %), auf den Gewichtsschritt gerundet */
+export function percentTable(e1rmValue, step = 2.5) {
+  const rows = [];
+  // Abrunden auf den Gewichtsschritt – lieber etwas leichter als zu schwer
+  for (let p = 100; p >= 50; p -= 5) rows.push({ pct: p, weight: Math.floor((e1rmValue * p / 100) / step) * step, reps: repsAtPct(p) });
+  return rows;
+}
+/** Grobe Wiederholungszahl, die bei x % des 1RM typischerweise möglich ist (Epley umgestellt) */
+function repsAtPct(pct) {
+  if (pct >= 100) return 1;
+  return Math.max(1, Math.round((100 / pct - 1) * 30));
 }
 
 export const PR_LABELS = {

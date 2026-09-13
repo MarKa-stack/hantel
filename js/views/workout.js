@@ -1,10 +1,10 @@
 // Trainingsmodus: eine Übung pro Seite, große Stepper, letztes Training + Empfehlung, PR-Erkennung
 import { h, svgIcon, fmtDuration, fmtNum, fmtDate, confirmSheet, openSheet, toast, haptic, parseNum } from '../util.js';
-import { getActiveWorkout, touchWorkout, finishWorkout, cancelWorkout, getSettings, sessionVolume } from '../store.js';
+import { getActiveWorkout, touchWorkout, finishWorkout, cancelWorkout, getSettings, sessionVolume, getExerciseSettings, updateExerciseSettings } from '../store.js';
 import { restTimer, unlockAudio, setWakeLockWanted } from '../timer.js';
-import { recommend, detectSetPRs, sessionPRs, fmtKg, PR_LABELS } from '../progression.js';
-import { findExercise } from '../exercise-db.js';
-import { muscleSets, bodyMapSvg, MUSCLE_NAME } from '../muscles.js';
+import { recommend, detectSetPRs, sessionPRs, fmtKg, PR_LABELS, warmupSets, platesFor } from '../progression.js';
+import { findExercise, EXERCISES } from '../exercise-db.js';
+import { muscleSets, bodyMapSvg, MUSCLE_NAME, musclesFor } from '../muscles.js';
 import { openExerciseInfo, figureThumb } from './exercise-info.js';
 
 let cleanup = [];
@@ -103,8 +103,10 @@ export function render(root, { navigate }) {
     const lib = findExercise(entry.name);
     const rec = recommend({ name: entry.name, sets: entry.targetSets, reps: entry.targetReps, weight: entry.targetWeight, weightStep: entry.weightStep });
     const range = rec.reps;
-    const targetTxt = `${entry.targetSets} × ${entry.targetReps}` + (range ? '' : '') + ` · Pause ${fmtDuration(entry.restSec)}`;
+    const targetTxt = `${entry.targetSets} × ${entry.targetReps}` + ` · Pause ${fmtDuration(entry.restSec)}`;
     const showInfo = () => openExerciseInfo(entry.name, { note: entry.note, target: targetTxt });
+    const prev = w.entries[i - 1], next = w.entries[i + 1];
+    const supersetWith = entry.superset && next ? next : (prev?.superset ? prev : null);
 
     // Kopfbereich der Übung
     body.append(h('div.wk-step', { text: `Übung ${i + 1} von ${w.entries.length}`, style: { margin: '4px 0 8px' } }));
@@ -114,12 +116,21 @@ export function render(root, { navigate }) {
         h('div.wk-name', { text: entry.name }),
         lib ? h('div.wk-muscles', { text: lib.muscles }) : null,
         h('div.wk-target', { text: targetTxt }),
-        h('div.row', { style: { marginTop: '6px', gap: '8px' } }, [
+        supersetWith ? h('div', { style: { marginTop: '4px' } }, [h('span.pill.accent', { text: '⇅ Supersatz mit ' + supersetWith.name })]) : null,
+        entry.swappedFrom ? h('div.small.faint', { text: `Getauscht (statt ${entry.swappedFrom}) – nur für heute` }) : null,
+        h('div.row', { style: { marginTop: '6px', gap: '8px', flexWrap: 'wrap' } }, [
           h('button.btn.sm.ghost', { text: 'ⓘ Ausführung', onclick: showInfo }),
+          h('button.btn.sm.ghost', { text: '⇄ Tauschen', onclick: () => swapExercise(entry) }),
         ]),
       ]),
     ]));
     if (entry.note) body.append(h('p.small.muted', { text: entry.note, style: { marginTop: '8px' } }));
+
+    // Maschineneinstellungen (übungsübergreifend gespeichert)
+    const es = getExerciseSettings(entry.name);
+    const setupIn = h('input.input', { type: 'text', value: es.setup || '', placeholder: 'Maschineneinstellungen: Sitz 4, Griffhöhe 3, Pin links …', style: { minHeight: '42px', fontSize: '15px' } });
+    setupIn.addEventListener('change', () => updateExerciseSettings(entry.name, { setup: setupIn.value.trim() }));
+    body.append(h('div.row', { style: { marginTop: '10px', gap: '8px' } }, [h('span', { text: '🔧', style: { fontSize: '18px' } }), setupIn]));
 
     // Letztes Training + Empfehlung
     const lastEntry = rec.last?.entry, lastDate = rec.last?.session?.startedAt;
@@ -148,6 +159,34 @@ export function render(root, { navigate }) {
     body.append(setsBox);
     const drawSets = () => {
       setsBox.innerHTML = '';
+      // Aufwärmsätze: aus dem Arbeitsgewicht des ersten Satzes, zählen nicht als Arbeitssätze
+      if (getSettings().warmupSets) {
+        const workW = entry.sets[0]?.weight;
+        const noneDone = !entry.warmup || entry.warmup.every(s => !s.done);
+        if (workW && (entry.warmup == null || (noneDone && entry.warmupFor !== workW))) {
+          entry.warmup = warmupSets(workW, entry.weightStep || 2.5).map(s => ({ ...s, done: false }));
+          entry.warmupFor = workW;
+          touchWorkout();
+        }
+        if (entry.warmup && entry.warmup.length) {
+          const det = h('details.warmup');
+          const doneN = entry.warmup.filter(s => s.done).length;
+          det.append(h('summary', { html: `<span>Aufwärmen · ${entry.warmup.length} Sätze</span><span class="faint">${doneN}/${entry.warmup.length} · zählt nicht als Volumen</span>` }));
+          entry.warmup.forEach((ws, wi) => {
+            const pct = Math.round((ws.weight / workW) * 100);
+            det.append(h('div.warm-row' + (ws.done ? '.done' : ''), {}, [
+              h('div.grow', {}, [h('span.mono', { text: `${fmtKg(ws.weight)} × ${ws.reps}` }), h('span.faint.small', { text: ` · ${pct} %` })]),
+              h('button.btn.sm' + (ws.done ? '.ghost' : ''), { html: ws.done ? svgIcon.check : '<span>Fertig</span>', onclick: () => {
+                unlockAudio();
+                ws.done = !ws.done; touchWorkout();
+                if (ws.done && getSettings().autoRestTimer) restTimer.start(Math.min(60, entry.restSec || 60));
+                drawSets();
+              } }),
+            ]));
+          });
+          setsBox.append(det);
+        }
+      }
       entry.sets.forEach((set, si) => setsBox.append(setCard(entry, set, si, i, drawSets)));
       setsBox.append(h('div.add-set', {}, [
         h('button.btn.sm.ghost', { text: '– Satz', disabled: entry.sets.length <= 1 || entry.sets[entry.sets.length - 1].done, onclick: () => { entry.sets.pop(); touchWorkout(); drawSets(); drawProgress(); drawNav(); } }),
@@ -172,15 +211,29 @@ export function render(root, { navigate }) {
     ]);
     card.append(head);
 
+    const updateSum = () => { sum.textContent = `${fmtKg(set.weight)} × ${set.reps ?? '–'}` + (set.rir != null ? ` · RIR ${set.rir}` : ''); };
     const weightStepper = stepper({
       value: set.weight, step, unit: getSettings().unit, min: 0, decimals: true,
-      onChange: (v) => { set.weight = v; sum.textContent = `${fmtKg(set.weight)} × ${set.reps ?? '–'}`; touchWorkout(); },
+      onChange: (v) => { set.weight = v; updateSum(); touchWorkout(); },
+      onTap: (setValue) => openWeightSheet(entry, set.weight, (v) => { setValue(v); }),
     });
     const repsStepper = stepper({
       value: set.reps, step: 1, unit: 'Wdh', min: 0, decimals: false,
-      onChange: (v) => { set.reps = v; sum.textContent = `${fmtKg(set.weight)} × ${set.reps ?? '–'}`; touchWorkout(); },
+      onChange: (v) => { set.reps = v; updateSum(); touchWorkout(); },
     });
     card.append(h('div.steppers', {}, [weightStepper, repsStepper]));
+    updateSum();
+
+    // RIR-Chips (Wiederholungen im Tank)
+    const rirRow = h('div.rir-row', {}, [h('span.lbl', { text: 'RIR' })]);
+    for (const r of [0, 1, 2, 3, 4]) {
+      const chip = h('button.chip' + (set.rir === r ? '.on' : ''), { text: r === 4 ? '4+' : String(r), onclick: () => {
+        set.rir = set.rir === r ? null : r; touchWorkout(); updateSum();
+        for (const c of rirRow.querySelectorAll('.chip')) c.classList.toggle('on', set.rir != null && c.textContent === (set.rir === 4 ? '4+' : String(set.rir)));
+      } });
+      rirRow.append(chip);
+    }
+    card.append(rirRow);
 
     const btn = h('button.btn.block.set-done-btn' + (set.done ? '.ghost' : '.good'), {
       html: set.done ? '<span>Erledigt – tippen zum Zurücksetzen</span>' : svgIcon.check + '<span>Satz abschließen</span>',
@@ -202,15 +255,101 @@ export function render(root, { navigate }) {
         const earlier = entry.sets.filter((s, j) => j !== si && s.done);
         const prs = detectSetPRs(entry.name, set, earlier);
         if (prs.length) { haptic([30, 40, 30]); showPrToast(entry.name, prs); }
-        // Pausentimer (nicht nach dem allerletzten Satz des Trainings)
+
+        // Supersatz: A → kein Timer, direkt zu B; B → Timer, danach zurück zu A
+        const nextEx = w.entries[exIdx + 1], prevEx = w.entries[exIdx - 1];
+        const isFirstOfPair = entry.superset && nextEx;
+        const isSecondOfPair = prevEx?.superset;
         const isLastOverall = exIdx === w.entries.length - 1 && entry.sets.every(s => s.done);
-        if (getSettings().autoRestTimer && !isLastOverall) restTimer.start(entry.restSec || getSettings().defaultRestSec);
+        if (isFirstOfPair) {
+          toast(`Supersatz: weiter mit ${nextEx.name}`, { action: { label: 'Weiter', fn: () => go(exIdx + 1) }, duration: 6000 });
+        } else {
+          if (getSettings().autoRestTimer && !isLastOverall) restTimer.start(entry.restSec || getSettings().defaultRestSec);
+          if (isSecondOfPair && prevEx.sets.some(s => !s.done)) {
+            toast(`Nächste Runde: ${prevEx.name}`, { action: { label: 'Zurück', fn: () => go(exIdx - 1) }, duration: 6000 });
+          }
+        }
         redrawAll(); drawProgress(); drawNav();
       },
     });
     card.append(btn);
     return card;
   };
+
+  // ---------- Übung tauschen (nur für diese Session) ----------
+  function swapExercise(entry) {
+    const mine = musclesFor(entry.name).primary;
+    const candidates = EXERCISES.filter(e => e.name !== entry.name && e.primary?.some(m => mine.includes(m)));
+    openSheet((sheet, close) => {
+      const apply = (name) => {
+        const orig = entry.swappedFrom || entry.name;
+        entry.swappedFrom = orig === name ? null : orig;
+        entry.name = name;
+        // Vorbelegung aus der Historie der neuen Übung
+        const rec = recommend({ name, sets: entry.targetSets, reps: entry.targetReps, weight: null, weightStep: entry.weightStep });
+        for (const s of entry.sets) if (!s.done) { s.weight = rec.weight ?? null; s.reps = rec.reps?.min ?? s.reps; }
+        entry.warmup = null; entry.warmupFor = null;
+        touchWorkout(); close(); drawExercise();
+        toast(`Getauscht: ${name}`);
+      };
+      const custom = h('input.input', { type: 'text', placeholder: 'Andere Übung eingeben …' });
+      custom.addEventListener('keydown', (e) => { if (e.key === 'Enter' && custom.value.trim()) apply(custom.value.trim()); });
+      sheet.append(
+        h('h2', { text: 'Übung tauschen' }),
+        h('p.small.muted.mb', { text: `Alternative für heute (gleiche Muskelgruppe: ${mine.map(m => MUSCLE_NAME[m]).join(', ') || '–'}). Der Plan bleibt unverändert.` }),
+        entry.swappedFrom ? h('button.btn.ghost.block.mb', { text: `Zurück zu ${entry.swappedFrom}`, onclick: () => apply(entry.swappedFrom) }) : null,
+        h('div.card', {}, candidates.length ? candidates.map(e => h('div.lib-row', { onclick: () => apply(e.name) }, [
+          figureThumb(e.name), h('div.grow', {}, [h('div', { text: e.name, style: { fontWeight: 600 } }), h('div.small.faint', { text: e.muscles })]),
+        ])) : [h('p.small.muted', { text: 'Keine passende Alternative in der Bibliothek.' })]),
+        h('div.row.mt', {}, [custom, h('button.btn.sm.primary', { text: 'OK', onclick: () => { if (custom.value.trim()) apply(custom.value.trim()); } })]),
+        h('div.actions', {}, [h('button.btn.block', { text: 'Abbrechen', onclick: close })]),
+      );
+    });
+  }
+
+  // ---------- Scheibenrechner / Gewicht direkt eingeben ----------
+  function openWeightSheet(entry, current, commit) {
+    const es = getExerciseSettings(entry.name);
+    const isBarbell = (entry.weightStep || 2.5) === 2.5 && !/kurzhantel|kh\b|maschine|kabel/i.test(entry.name);
+    let bar = es.barWeight != null ? es.barWeight : (isBarbell ? getSettings().barWeight : 0);
+    let value = current ?? 0;
+    openSheet((sheet, close) => {
+      const input = h('input.input.num', { type: 'text', inputmode: 'decimal', value: String(value).replace('.', ','), style: { fontSize: '26px', minHeight: '60px' } });
+      const platesBox = h('div');
+      const barSeg = h('div.seg', {}, [20, 15, 10, 0].map(b => h('button', { text: b ? `${b} kg` : 'Keine Stange', class: bar === b ? 'active' : '', onclick: () => {
+        bar = b; updateExerciseSettings(entry.name, { barWeight: b });
+        for (const x of barSeg.children) x.classList.toggle('active', x.textContent === (b ? `${b} kg` : 'Keine Stange'));
+        drawPlates();
+      } })));
+      const drawPlates = () => {
+        platesBox.innerHTML = '';
+        const v = parseNum(input.value);
+        if (v == null) return;
+        if (!bar) { platesBox.append(h('p.small.faint', { text: 'Ohne Stange (Maschine/Kurzhantel): keine Scheibenberechnung.' })); return; }
+        if (v < bar) { platesBox.append(h('p.small.faint', { text: `Zielgewicht liegt unter dem Stangengewicht (${fmtKg(bar)}).` })); return; }
+        const r = platesFor(v, bar);
+        platesBox.append(h('div.small.faint', { text: 'Pro Seite' }));
+        platesBox.append(h('div.plates', {}, r.perSide.length ? r.perSide.map(p => h('span.plate', { class: 'p' + String(p).replace('.', '_'), text: String(p).replace('.', ',') })) : [h('span.faint', { text: 'nur die Stange' })]));
+        platesBox.append(h('div.small.mt', { html: `= <b>${fmtKg(r.total)}</b>` + (r.exact ? '' : ` <span class="faint">(${fmtKg(v)} nicht exakt aufteilbar, Rest ${String(r.remainder).replace('.', ',')} kg)</span>`) }));
+      };
+      input.addEventListener('input', drawPlates);
+      const quick = h('div.grid-4', {}, [-5, -2.5, 2.5, 5].map(d => h('button.btn.sm.ghost', { text: (d > 0 ? '+' : '') + String(d).replace('.', ','), onclick: () => {
+        const v = Math.max(0, (parseNum(input.value) || 0) + d); input.value = String(Math.round(v * 100) / 100).replace('.', ','); drawPlates();
+      } })));
+      sheet.append(
+        h('h2', { text: 'Gewicht' }),
+        input, h('div.mt', {}, [quick]),
+        h('div.subhead', { style: { margin: '14px 0 6px' } }, [h('h2', { text: 'Scheibenrechner' })]),
+        barSeg, h('div.mt', {}, [platesBox]),
+        h('div.actions', {}, [
+          h('button.btn.ghost', { text: 'Abbrechen', onclick: close }),
+          h('button.btn.primary', { text: 'Übernehmen', onclick: () => { const v = parseNum(input.value); if (v != null) commit(v); close(); } }),
+        ]),
+      );
+      drawPlates();
+      setTimeout(() => { input.focus(); input.select(); }, 60);
+    });
+  }
 
   drawExercise();
 
@@ -283,7 +422,7 @@ export function unmount() {
 
 // ---------- Stepper ----------
 
-function stepper({ value, step, unit, min = 0, decimals, onChange }) {
+function stepper({ value, step, unit, min = 0, decimals, onChange, onTap }) {
   let v = value == null ? null : Number(value);
   const fmt = () => v == null ? '–' : decimals ? String(Math.round(v * 100) / 100).replace('.', ',') : String(v);
   const valEl = h('div.val', {}, [h('span', { text: fmt() }), h('small', { text: unit })]);
@@ -294,8 +433,9 @@ function stepper({ value, step, unit, min = 0, decimals, onChange }) {
   };
   const minus = h('button', { text: '−', 'aria-label': 'weniger', onclick: () => set(v == null ? 0 : v - step) });
   const plus = h('button', { text: '+', 'aria-label': 'mehr', onclick: () => set(v == null ? step : v + step) });
-  // Tippen auf den Wert → direkt eingeben
+  // Tippen auf den Wert → Sheet (Gewicht: Scheibenrechner) oder direkt eingeben (Wdh)
   valEl.addEventListener('click', () => {
+    if (onTap) { onTap(set); return; }
     const input = h('input', { type: 'text', inputmode: decimals ? 'decimal' : 'numeric', value: v ?? '' });
     const commit = () => { const n = parseNum(input.value); set(n); input.replaceWith(valEl); };
     input.addEventListener('blur', commit);

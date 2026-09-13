@@ -15,6 +15,8 @@ Kein Build-Schritt, kein Backend – reines HTML/CSS/JavaScript, Daten bleiben a
 - **Timer-Seite**: Countdown mit Presets + Stoppuhr (zeitstempelbasiert, stimmt auch nach Sperrbildschirm)
 - **Fortschritt**: Workouts pro Woche, Volumen, Serie; je Übung Kennzahlen (Bestes Gewicht, Top-Satz, e1RM, Volumen, Wdh) × Zeiträume (1M/3M/6M/1J/Gesamt) mit Tooltip (Datum, Gewicht × Wdh, Satz, e1RM), Veränderung („+13 kg in 5 Monaten“), Statistik und Rekorde
 - **Muskelgruppen**: Sätze je Muskelgruppe (primär 1,0 / sekundär 0,5) pro Woche als Balken + Körperkarte Vorder-/Rückseite (grün = leicht … rot = intensiv), Tipp auf Muskel → diese/letzte Woche, 4-Wochen-Schnitt, Übungen; Körperkarte auch beim Workout-Abschluss
+- **Studio-Tools im Training**: Maschineneinstellungen je Übung (bleiben gespeichert), Scheibenrechner (Tipp aufs Gewicht, Stange 20/15/10 kg oder keine), automatische Aufwärmsätze (40/60/80 %, zählen nicht als Volumen), RIR-Chips je Satz (schärfen die Progression), Übung für heute tauschen (gleiche Muskelgruppe), Supersätze (Pause erst nach der zweiten Übung), Pausentimer klingelt auch bei gesperrtem Bildschirm (lautloses Audio hält die Session offen)
+- **Rund ums Training**: „Heute dran“-Karte mit A/B-Rotation, Gewicht & Maße mit Verlauf, Trainingskalender (Heatmap), vergangene Sessions korrigierbar, 1RM-Prozent-Tabelle je Übung
 - **Übungsbibliothek**: animierte Strichfiguren (Start ↔ Endposition) mit Muskelgruppen und 2–3 Ausführungstipps zu 25 Übungen – im Plan, im Workout (ⓘ) und unter „Mehr“
 - **Vorlagen**: Oberkörper/Unterkörper A+B (4-/5-Tage-Split) werden beim ersten Start angelegt; Zusatztag Samstag optional
 - **Backup**: JSON-Export/-Import unter „Mehr“
@@ -61,7 +63,7 @@ js/exercise-db.js     Übungsbibliothek: Figuren, Muskeln, Tipps, Namenszuordnun
 js/templates.js       Eingebaute Plan-Vorlagen + Erststart-Seeding
 js/progression.js     Double Progression, Gewichtsschritte, PR-Erkennung (Epley-e1RM)
 js/muscles.js         Muskelgruppen-Taxonomie, Satz-Auswertung, Körperkarte (SVG)
-js/views/*.js         Seiten: Pläne, Plan, Bearbeiten, Import, Workout, Timer, Fortschritt, Mehr, Bibliothek, Übungs-Info
+js/views/*.js         Seiten: Pläne, Plan, Bearbeiten, Import, Workout, Timer, Fortschritt, Mehr, Bibliothek, Übungs-Info, Körper
 icons/                App-Icons (PNG via tools/make-icons.ps1)
 ```
 

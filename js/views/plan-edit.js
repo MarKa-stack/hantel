@@ -35,7 +35,7 @@ export function render(root, { params, navigate }) {
       return;
     }
     plan.exercises.forEach((ex, i) => {
-      const target = `${ex.sets} × ${ex.reps}` + (ex.weight != null ? ` @ ${fmtWeight(ex.weight, settings.unit)}` : '') + (ex.restSec ? ` · ${ex.restSec}s` : '');
+      const target = `${ex.sets} × ${ex.reps}` + (ex.weight != null ? ` @ ${fmtWeight(ex.weight, settings.unit)}` : '') + (ex.restSec ? ` · ${ex.restSec}s` : '') + (ex.superset && plan.exercises[i + 1] ? ' · ⇅ Supersatz' : '');
       listEl.append(h('div.ex-row', { onclick: () => editExercise(ex) }, [
         h('div.idx', { text: i + 1 }),
         h('div.grow', {}, [
@@ -68,6 +68,11 @@ export function render(root, { params, navigate }) {
         ...[1, 1.25, 2, 2.5, 5, 10].map(v => h('option', { value: String(v), text: `${String(v).replace('.', ',')} kg`, selected: draft.weightStep === v })),
       ]);
       name.addEventListener('input', () => { if (!stepSel.value) stepSel.firstChild.textContent = `Automatisch (${String(inferWeightStep(name.value)).replace('.', ',')} kg)`; });
+      const superIn = h('input', { type: 'checkbox', checked: !!draft.superset });
+      const superRow = h('div.switch', {}, [
+        h('div.grow', {}, [h('div.lbl', { text: 'Supersatz mit der nächsten Übung' }), h('div.desc', { text: 'Im Training: A → B ohne Pause, Pausentimer erst nach B' })]),
+        h('label.toggle', {}, [superIn, h('span')]),
+      ]);
 
       const save = () => {
         const n = name.value.trim();
@@ -78,6 +83,7 @@ export function render(root, { params, navigate }) {
         draft.weight = parseNum(weight.value);
         draft.restSec = parseInt(rest.value, 10) || null;
         draft.weightStep = parseNum(stepSel.value);
+        draft.superset = superIn.checked;
         draft.note = note.value.trim();
         if (isNew) plan.exercises.push(draft);
         else Object.assign(ex, draft);
@@ -105,6 +111,7 @@ export function render(root, { params, navigate }) {
           ]),
           h('div.field', {}, [h('label', { text: 'Gewichtsschritt (Progression)' }), stepSel]),
           h('div.field', {}, [h('label', { text: 'Notiz' }), note]),
+          superRow,
         ]),
         !isNew ? h('div.row.mt', {}, [
           h('button.btn.sm.ghost.grow', { text: '↑ Nach oben', onclick: () => move(-1), disabled: idx <= 0 }),
