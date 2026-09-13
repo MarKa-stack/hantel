@@ -12,6 +12,8 @@ Kein Build-Schritt, kein Backend – reines HTML/CSS/JavaScript, Daten bleiben a
 - **Workout-Modus**: Sätze abhaken, Gewicht/Wdh eintragen, Vorbelegung aus dem letzten Training, automatischer **Pausentimer** mit Ton
 - **Timer-Seite**: Countdown mit Presets + Stoppuhr (zeitstempelbasiert, stimmt auch nach Sperrbildschirm)
 - **Fortschritt**: Workouts pro Woche, Volumen, Serie, Bestwerte & geschätztes 1RM pro Übung, Verlaufs-Charts, neue Rekorde werden beim Abschluss erkannt
+- **Übungsbibliothek**: animierte Strichfiguren (Start ↔ Endposition) mit Muskelgruppen und 2–3 Ausführungstipps zu 25 Übungen – im Plan, im Workout (ⓘ) und unter „Mehr“
+- **Vorlagen**: Oberkörper/Unterkörper A+B (4-/5-Tage-Split) werden beim ersten Start angelegt; Zusatztag Samstag optional
 - **Backup**: JSON-Export/-Import unter „Mehr“
 - **Offline** dank Service Worker, Dark/Light Mode folgt dem System
 
@@ -23,6 +25,7 @@ powershell -ExecutionPolicy Bypass -File tools\serve.ps1
 
 Dann `http://localhost:8080/` öffnen. Der Server braucht kein Node/Python.
 Ein Test-PDF liegt unter `test/trainingsplan-test.pdf` (erzeugt von `tools/make-test-pdf.ps1`).
+`test/figures.html` zeigt alle Übungsfiguren; `renderSheet(0|1)` in der Konsole schreibt ein PNG-Sprite nach `test/out/`.
 
 ## Auf dem iPhone installieren
 
@@ -50,7 +53,10 @@ js/store.js           State + localStorage, Statistik-Helfer
 js/timer.js           Countdown/Stoppuhr, Ton, Wake Lock
 js/pdf-import.js      pdf.js-Textextraktion + Mustererkennung
 js/ai-import.js       Claude-API-Aufruf (PDF → JSON)
-js/views/*.js         Seiten: Pläne, Plan, Bearbeiten, Import, Workout, Timer, Fortschritt, Mehr
+js/figure.js          Strichfiguren-Renderer (Posen über Gelenkwinkel, SMIL-Animation)
+js/exercise-db.js     Übungsbibliothek: Figuren, Muskeln, Tipps, Namenszuordnung
+js/templates.js       Eingebaute Plan-Vorlagen + Erststart-Seeding
+js/views/*.js         Seiten: Pläne, Plan, Bearbeiten, Import, Workout, Timer, Fortschritt, Mehr, Bibliothek, Übungs-Info
 icons/                App-Icons (PNG via tools/make-icons.ps1)
 ```
 

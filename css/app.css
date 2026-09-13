@@ -517,3 +517,43 @@ details.raw pre { white-space: pre-wrap; font-size: 12px; color: var(--text-3); 
   .fab { right: calc(50% - 340px + 18px); }
   .toast { bottom: calc(var(--tabbar-h) + 16px); }
 }
+
+/* ------------------------------------------------------------------
+   Übungsfiguren (SVG-Strichfiguren)
+   ------------------------------------------------------------------ */
+.figure { width: 100%; height: auto; display: block; }
+.figure .limb { fill: none; stroke: var(--text); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+.figure .limb.back { stroke: var(--text-3); stroke-width: 4.5; }
+.figure .head { fill: var(--text); }
+.figure .frame { fill: var(--surface-3); }
+.figure .frame-line { fill: none; stroke: var(--surface-3); stroke-width: 3; stroke-linecap: round; }
+.figure .ground { stroke: var(--border); stroke-width: 2; stroke-linecap: round; }
+.figure .equip-line { fill: none; stroke: var(--text-3); stroke-width: 2.5; stroke-linecap: round; }
+.figure .equip-move { fill: var(--accent); stroke: var(--accent); stroke-width: 4; stroke-linecap: round; }
+.figure .equip-pad { fill: none; stroke: var(--accent); stroke-width: 6; stroke-linecap: round; }
+
+.fig-thumb {
+  width: 64px; height: 52px; flex: none; border-radius: 10px;
+  background: var(--surface-2); padding: 3px; display: flex; align-items: center; justify-content: center;
+}
+.fig-thumb .figure { height: 100%; width: auto; max-width: 100%; }
+.fig-hero {
+  background: var(--surface-2); border-radius: var(--radius); padding: 10px 14px;
+  max-width: 320px; margin: 0 auto 14px;
+}
+.tips { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.tips li { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; }
+.tips li::before {
+  content: counter(tip); counter-increment: tip;
+  flex: none; width: 24px; height: 24px; border-radius: 8px;
+  background: var(--accent-soft); color: var(--accent);
+  font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center;
+}
+.tips { counter-reset: tip; }
+.info-btn {
+  width: 32px; height: 32px; border-radius: 50%; border: 0; flex: none;
+  background: var(--surface-2); color: var(--text-2); font-weight: 700; font-size: 15px;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.lib-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; cursor: pointer; }
+.lib-row + .lib-row { border-top: 1px solid var(--border); }

@@ -2,6 +2,7 @@
 import { h, svgIcon, fmtDuration, fmtWeight, fmtNum, confirmSheet, openSheet, toast, haptic, parseNum } from '../util.js';
 import { getActiveWorkout, touchWorkout, finishWorkout, cancelWorkout, getSettings, sessionVolume, detectPRs, lastPerformance } from '../store.js';
 import { restTimer, unlockAudio, setWakeLockWanted } from '../timer.js';
+import { openExerciseInfo, figureThumb } from './exercise-info.js';
 
 let cleanup = [];
 
@@ -65,12 +66,17 @@ export function render(root, { navigate }) {
 
     const last = lastPerformance(entry.name);
     const target = `Ziel: ${entry.targetSets} × ${entry.targetReps}` + (entry.targetWeight != null ? ` @ ${fmtWeight(entry.targetWeight, settings.unit)}` : '') + ` · Pause ${entry.restSec}s`;
+    const showInfo = () => openExerciseInfo(entry.name, { note: entry.note, target });
     card.append(h('div.ex-head', {}, [
       h('div.grow', {}, [
         h('div.ex-name', { text: `${idx + 1}. ${entry.name}` }),
         h('div.ex-target', { text: target }),
         last ? h('div.ex-last', { text: 'Letztes Mal: ' + last.sets.map(s => `${s.weight ?? '–'}×${s.reps ?? '–'}`).join(' · ') }) : null,
         entry.note ? h('div.small.muted', { text: entry.note }) : null,
+      ]),
+      h('div', { onclick: showInfo, style: { cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' } }, [
+        figureThumb(entry.name),
+        h('button.info-btn', { text: 'i', 'aria-label': 'Ausführungstipps' }),
       ]),
     ]));
 

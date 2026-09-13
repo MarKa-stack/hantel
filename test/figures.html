@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Figuren-Test</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>
+  body { position: static; overflow: auto; padding: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+  .cell { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px; }
+  .cell h4 { margin: 0 0 6px; font-size: 13px; }
+  .cell .figure { background: var(--surface-2); border-radius: 8px; }
+</style></head>
+<body><div class="grid" id="grid"></div>
+<script type="module">
+  import { EXERCISES, exerciseFigure } from '../js/exercise-db.js';
+  const params = new URLSearchParams(location.search);
+  const animate = params.get('static') == null;
+  const grid = document.getElementById('grid');
+  for (const e of EXERCISES) {
+    if (!e.fig) continue;
+    const d = document.createElement('div'); d.className = 'cell';
+    d.innerHTML = `<h4>${e.name}</h4>` + exerciseFigure(e, { animate, pose: +(params.get('pose') ?? 1) });
+    grid.append(d);
+  }
+
+  // Für die visuelle Prüfung: alle Figuren als PNG-Sprite an den Testserver schicken
+  const CSS = `.limb{fill:none;stroke:#14171f;stroke-width:5;stroke-linecap:round;stroke-linejoin:round}.limb.back{stroke:#9aa0b0;stroke-width:4.5}.head{fill:#14171f}.frame{fill:#cfd3dd}.frame-line{fill:none;stroke:#cfd3dd;stroke-width:3;stroke-linecap:round}.ground{stroke:#b9bec9;stroke-width:2}.equip-line{fill:none;stroke:#8a91a3;stroke-width:2.5;stroke-linecap:round}.equip-move{fill:#e84a22;stroke:#e84a22;stroke-width:4;stroke-linecap:round}.equip-pad{fill:none;stroke:#e84a22;stroke-width:6;stroke-linecap:round}`;
+  window.renderSheet = async (pose = 0, scale = 1.5, only = null) => {
+    const entries = EXERCISES.filter(e => e.fig && (!only || only.includes(e.id)));
+    const cols = 4, cw = 200 * scale, ch = 175 * scale;
+    const canvas = document.createElement('canvas');
+    canvas.width = cols * cw; canvas.height = Math.ceil(entries.length / cols) * ch;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      let svg = exerciseFigure(e, { animate: false, pose });
+      svg = svg.replace('<svg', `<svg width="${200 * scale}" height="${160 * scale}"`).replace('>', '><style>' + CSS + '</style>');
+      const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+      const img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+      const x = (i % cols) * cw, y = Math.floor(i / cols) * ch;
+      ctx.drawImage(img, x, y + 14 * scale, 200 * scale, 160 * scale);
+      ctx.fillStyle = '#000'; ctx.font = `${11 * scale}px sans-serif`;
+      ctx.fillText(`${i + 1} ${e.name} (${pose ? 'Ende' : 'Start'})`, x + 4, y + 11 * scale);
+      ctx.strokeStyle = '#ddd'; ctx.strokeRect(x + 0.5, y + 0.5, cw, ch);
+    }
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    const res = await fetch(`/__save?name=sheet-${pose}.png`, { method: 'POST', body: blob });
+    return await res.text();
+  };
+</script></body></html>

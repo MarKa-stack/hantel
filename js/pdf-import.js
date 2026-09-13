@@ -92,11 +92,14 @@ const RE_SETS_WORD = new RegExp('(\\d{1,2})\\s*(?:sätze|satz|sets?|serien)' + N
 const RE_REPS_WORD = new RegExp('(\\d{1,3}(?:\\s*[-–]\\s*\\d{1,3})?)\\s*(?:wdh\\.?|wiederholungen|wh' + NW + '|reps?' + NW + ')', 'i');
 const RE_REPS_ONLY_WORD = /(?:^|[^a-zäöüß])(amrap|max\.?|maximal|bis (?:zum )?muskelversagen)(?![a-zäöüß])/i;
 const RE_WEIGHT = new RegExp('(\\d{1,3}(?:[.,]\\d{1,2})?)\\s*(?:kg|kilo)' + NW, 'i');
+// Pause: "Pause 2-3 min", "Pause 90 s", "60-90 s Pause", "P: 90s" – Spannen werden gemittelt
 const RE_REST = new RegExp(
-  '(?:pause|rest|(?:^|\\s)p(?=\\s*[:.]))\\s*[:=.]?\\s*(\\d{1,3})\\s*(s|sek|sec|sekunden|min|minuten|\')?' + NW +
-  '|(\\d{1,3})\\s*(s|sek|sec|sekunden)' + NW + '\\s*(?:pause|rest)?' +
-  '|(\\d{1,2})\\s*(min|minuten)' + NW + '\\s*(?:pause|rest)', 'i');
-const RE_LEADING_NUM = /^\s*(?:\d{1,2}\s*[.):]|[-•·*▪●–]|[a-z]\))\s*/i;
+  '(?:pause|rest|(?:^|\\s)p(?=\\s*[:.]))\\s*[:=.]?\\s*(\\d{1,3})(?:\\s*-\\s*(\\d{1,3}))?\\s*(s|sek|sec|sekunden|min|minuten|\')?' + NW +
+  '|(\\d{1,3})(?:\\s*-\\s*(\\d{1,3}))?\\s*(s|sek|sec|sekunden)' + NW + '\\s*(?:pause|rest)?' +
+  '|(\\d{1,2})(?:\\s*-\\s*(\\d{1,2}))?\\s*(min|minuten)' + NW + '\\s*(?:pause|rest)', 'i');
+const RE_RIR = /\bR[IP]E?R?\s*:?\s*(\d(?:\s*-\s*\d)?)/i; // RIR 2, RIR 1-2, RPE 8
+const RE_LEADING_NUM = /^\s*(?:\d{1,2}\s*[.):]|\d{2}\s+(?=[A-ZÄÖÜ])|[-•·*▪●–]|[a-z]\))\s*/i;
+const RE_NUMBERED_HEADING = /^(\d{1,2})[.):]?\s+([A-ZÄÖÜ][^|]{2,60})$/;
 
 function norm(s) {
   return s
@@ -109,6 +112,8 @@ function norm(s) {
 }
 
 function letters(s) { return (s.match(/[a-zäöüß]/gi) || []).length; }
+function words(s) { return s.trim().split(/\s+/).filter(Boolean).length; }
+function mid(a, b) { return b == null ? a : Math.round((a + b) / 2 / 5) * 5; }
 
 function detectHeader(cells) {
   if (cells.length < 2) return null;
@@ -117,26 +122,36 @@ function detectHeader(cells) {
   cells.forEach((c, i) => {
     const t = c.trim();
     for (const [k, re] of Object.entries(HEADER_KEYS)) {
-      if (re.test(t)) { if (map[k] == null) map[k] = i; hits++; break; }
+      if (re.test(t)) { if (map[k] == null) { map[k] = i; hits++; } break; }
     }
   });
+  // Mindestens zwei verschiedene Spaltenarten ("Pause | Pause" ist kein Header)
   return hits >= 2 ? map : null;
 }
 
 function parseRest(s) {
   const m = s.match(RE_REST);
   if (!m) return null;
-  if (m[1]) { const n = +m[1]; return /min/.test(m[2] || '') || m[2] === "'" ? n * 60 : n; }
-  if (m[3]) return +m[3];
-  if (m[5]) return +m[5] * 60;
+  const toSec = (a, b, unit) => {
+    const f = /min|'/.test(unit || '') ? 60 : 1;
+    return mid(+a * f, b != null ? +b * f : null);
+  };
+  if (m[1]) return toSec(m[1], m[2], m[3]);
+  if (m[4]) return toSec(m[4], m[5], m[6]);
+  if (m[7]) return toSec(m[7], m[8], 'min');
   return null;
 }
 
 function cleanName(s) {
   let n = s.replace(RE_LEADING_NUM, '');
-  n = n.replace(/[\s:|\-–,;(]+$/g, '').trim();
+  n = n.replace(/[\s:|\-–,;(*]+$/g, '').trim();
   n = n.replace(/\s{2,}/g, ' ');
   return n;
+}
+
+/** Sieht die Zeile wie ein Satz (Tipp/Erklärung) aus statt wie ein Übungsname? */
+function looksLikeSentence(t) {
+  return /[;.!?]$/.test(t) || t.includes(';') || words(t) > 6 || /^(RIR|Aufwärmen|Beispiel)\b/i.test(t);
 }
 
 /** Versucht, aus einer Zeile eine Übung zu lesen. */
@@ -144,6 +159,10 @@ function parseExerciseLine(line, header) {
   const cells = line.split(' | ').map(c => c.trim()).filter(Boolean);
   const text = cells.join(' ');
   if (letters(text) < 3) return null;
+  // Lange Fließtextzeilen (Erklärungen) sind keine Übungen
+  if (text.length > 110 || words(text) > 14) return null;
+  // Mehrere Satz×Wdh-Angaben in einer Zeile = Aufzählung im Text, keine einzelne Übung
+  if ((text.match(new RegExp(RE_SETSXREPS.source, 'g')) || []).length > 1) return null;
 
   let name = null, sets = null, reps = null, weight = null, restSec = null, note = '';
   let restText = text; // Text für die Pausen-Suche (ohne Zeitangaben, die zu den Wdh gehören, z.B. "Plank 3 x 45 s")
@@ -164,7 +183,7 @@ function parseExerciseLine(line, header) {
     }
     restText = header.rest != null ? (p || '') : cells.filter((_, i) => i !== header.reps).join(' ');
     if (w) { const m = w.match(/\d{1,3}(?:[.,]\d{1,2})?/); if (m) weight = parseFloat(m[0].replace(',', '.')); }
-    if (p) { const m = p.match(/\d{1,3}/); if (m) restSec = /min/i.test(p) ? +m[0] * 60 : +m[0]; }
+    if (p) restSec = parseRest('Pause ' + p);
     // Fallback: setsXreps in einer Zelle
     if (sets == null && reps == null) {
       const m = text.match(RE_SETSXREPS);
@@ -176,6 +195,8 @@ function parseExerciseLine(line, header) {
   // 2) Freitext-Muster
   if (sets == null && reps == null) {
     let m = text.match(RE_SETSXREPS);
+    // Treffer, der über eine Zellgrenze geht ("2× | 10 direkt"), ist kein Satz×Wdh
+    if (m && cells.length > 1 && !cells.some(c => RE_SETSXREPS.test(c))) m = null;
     if (m) {
       sets = +m[1]; reps = m[2].replace(/\s+/g, '');
       name = name ?? text.slice(0, m.index);
@@ -219,9 +240,12 @@ function parseExerciseLine(line, header) {
   // Gewicht & Pause aus dem gesamten Text nachziehen
   if (weight == null) { const m = text.match(RE_WEIGHT); if (m) weight = parseFloat(m[1].replace(',', '.')); }
   if (restSec == null) restSec = parseRest(restText);
+  // RIR / RPE als Notiz übernehmen
+  const rir = text.match(RE_RIR);
+  if (rir) note = [`${rir[0].slice(0, 3).toUpperCase()} ${rir[1].replace(/\s+/g, '')}`, note].filter(Boolean).join(' · ');
 
   name = cleanName(name);
-  if (letters(name) < 3) return null;
+  if (letters(name) < 3 || looksLikeSentence(name)) return null;
   if (Object.values(HEADER_KEYS).some(re => re.test(name))) return null;
   if (sets == null) sets = 3;
   if (reps == null) reps = '10';
@@ -233,8 +257,9 @@ function isDayHeader(line) {
   const t = line.replace(/ \| /g, ' ').trim();
   if (t.length > 48 || letters(t) < 3) return false;
   if (RE_SETSXREPS.test(t) || RE_REPS_WORD.test(t)) return false;
-  if (DAY_WORDS.test(t)) return true;
-  if (SPLIT_WORDS.test(t) && !/\d/.test(t.replace(/\b(tag|day|woche)\s*\d\b/i, ''))) return true;
+  if (looksLikeSentence(t)) return false;
+  if (DAY_WORDS.test(t) && words(t) <= 5) return true;
+  if (SPLIT_WORDS.test(t) && words(t) <= 4 && !/\d/.test(t.replace(/\b(tag|day|woche)\s*\d\b/i, ''))) return true;
   if (/^[A-ZÄÖÜ][A-ZÄÖÜ\s\-/&]{3,}$/.test(t) && !/\d/.test(t)) return true; // GROSSBUCHSTABEN-Überschrift
   if (/:$/.test(t) && t.length < 32) return true;
   return false;
@@ -250,7 +275,8 @@ export function parsePlanText(rawLines, fallbackName = 'Importierter Plan') {
   const unmatched = [];
   let current = null;
   let header = null;
-  let pendingName = null; // Übungsname auf eigener Zeile, Sätze/Wdh folgen
+  let pendingName = null;   // Übungsname auf eigener Zeile, Sätze/Wdh folgen
+  let lastExerciseAt = -10; // Zeilenindex der zuletzt erkannten Übung (für Tipp-Zeilen darunter)
 
   const ensurePlan = (name) => {
     if (!current || name) {
@@ -264,10 +290,36 @@ export function parsePlanText(rawLines, fallbackName = 'Importierter Plan') {
     const line = lines[i];
     if (!line) { pendingName = null; continue; }
     const cells = line.split(' | ').map(c => c.trim()).filter(Boolean);
+    const flat = cells.join(' ');
 
     // Tabellen-Header?
     const hdr = detectHeader(cells);
     if (hdr) { header = hdr; pendingName = null; continue; }
+
+    // Nummerierte Übungsüberschrift: "01 Brustpresse", "3. Kniebeugen", "02 | Latzug"
+    const nh = flat.match(RE_NUMBERED_HEADING);
+    if (nh && !RE_SETSXREPS.test(flat) && !looksLikeSentence(nh[2])) {
+      pendingName = cleanName(nh[2]);
+      continue;
+    }
+
+    // Tipp-/Muskelzeile direkt unter einer Übung (max. 2 Zeilen) → als Notiz anhängen.
+    // Muskel-Label: "Quadrizeps, Gesäß", "Waden, Schwerpunkt Soleus"; Tipp: Satz mit ";" oder Punkt.
+    const last = current?.exercises[current.exercises.length - 1];
+    const next = lines[i + 1] || '';
+    const nextIsSpec = RE_SETSXREPS.test(next) && !/[a-zäöüß]{3}/i.test(next.split(' | ')[0].replace(RE_SETSXREPS, ''));
+    const isMuscleLabel = /^[A-ZÄÖÜ][a-zäöüß]+(?:[,\s()]+[A-ZÄÖÜa-zäöüß()][a-zäöüß()]*){0,4}$/.test(flat) && words(flat) <= 4;
+    // Tipp = ein Satz in einer Zelle, ohne Satz-/Wdh-Angaben und ohne Nummerierung
+    const isTip = looksLikeSentence(flat) && cells.length === 1 && (flat.match(/\d+/g) || []).length <= 2
+      && !/^\d{1,2}[.)]/.test(flat) && !RE_SETS_WORD.test(flat) && !RE_REPS_WORD.test(flat)
+      && !/[!?]$/.test(flat) && !/stand:|seite \d|\d \/ \d/i.test(flat);
+    if (last && i - lastExerciseAt <= 2 && letters(flat) >= 3 && flat.length <= 90 && !RE_SETSXREPS.test(flat)
+        && (isTip || (isMuscleLabel && !nextIsSpec && !DAY_WORDS.test(flat)))) {
+      const r = /pause|rest/i.test(flat) ? parseRest(flat) : null;
+      if (r && last.restSec == null) last.restSec = r;
+      last.note = [last.note, flat].filter(Boolean).join(' · ');
+      continue;
+    }
 
     // Tag/Abschnitt?
     if (isDayHeader(line)) {
@@ -283,7 +335,7 @@ export function parsePlanText(rawLines, fallbackName = 'Importierter Plan') {
     // Übung?
     let ex = parseExerciseLine(line, header);
 
-    // Zwei-Zeilen-Layout: "Bankdrücken" / "3 x 10"
+    // Zwei-Zeilen-Layout: "Bankdrücken" / "3 x 10 | RIR 2 | Pause 2 min"
     if (!ex && pendingName) {
       const combined = parseExerciseLine(pendingName + ' ' + line, null);
       if (combined) { ex = combined; pendingName = null; }
@@ -291,29 +343,24 @@ export function parsePlanText(rawLines, fallbackName = 'Importierter Plan') {
 
     if (ex) {
       ensurePlan(null).exercises.push(ex);
+      lastExerciseAt = i;
       pendingName = null;
       continue;
     }
 
     // Zeile ohne Zahlen, könnte ein Übungsname sein, dessen Angaben in der nächsten Zeile stehen
-    if (letters(line) >= 3 && !/\d/.test(line) && line.length < 60 && cells.length === 1) {
+    if (letters(line) >= 3 && !/\d/.test(line) && line.length < 60 && cells.length === 1 && !looksLikeSentence(line)) {
       pendingName = cleanName(line);
       continue;
     }
 
-    // Pausen-/Notizzeile direkt unter einer Übung
-    const last = current?.exercises[current.exercises.length - 1];
-    if (last && /pause|rest/i.test(line) && !RE_SETSXREPS.test(line)) {
-      const r = parseRest(line);
-      if (r) { last.restSec = last.restSec ?? r; continue; }
-    }
     unmatched.push(line);
   }
 
   // Pläne ohne Übungen entfernen
   const result = plans.filter(p => p.exercises.length > 0);
   // Globale "Pause: 90s"-Angabe auf Übungen ohne Pause übertragen
-  const globalRest = unmatched.map(parseRest).find(Boolean);
+  const globalRest = unmatched.filter(l => /pause|rest/i.test(l) && l.length < 80).map(parseRest).find(Boolean);
   if (globalRest) for (const p of result) for (const e of p.exercises) if (e.restSec == null) e.restSec = globalRest;
 
   return { plans: result, unmatched };

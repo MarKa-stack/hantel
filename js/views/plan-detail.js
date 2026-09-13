@@ -3,6 +3,7 @@ import { h, svgIcon, fmtWeight, confirmSheet, toast } from '../util.js';
 import { getPlan, startWorkout, getActiveWorkout, cancelWorkout, getSettings, lastPerformance } from '../store.js';
 import { unlockAudio } from '../timer.js';
 import { colorFor } from './plans.js';
+import { openExerciseInfo, figureThumb } from './exercise-info.js';
 
 export function render(root, { params, query, navigate }) {
   const plan = getPlan(params[0]);
@@ -54,14 +55,16 @@ export function render(root, { params, query, navigate }) {
   plan.exercises.forEach((ex, i) => {
     const last = lastPerformance(ex.name);
     const target = `${ex.sets} × ${ex.reps}` + (ex.weight != null ? ` @ ${fmtWeight(ex.weight, settings.unit)}` : '') + ` · ${ex.restSec || settings.defaultRestSec}s Pause`;
-    card.append(h('div.ex-row', {}, [
-      h('div.idx', { text: i + 1 }),
+    const thumb = figureThumb(ex.name);
+    card.append(h('div.ex-row', { onclick: () => openExerciseInfo(ex.name, { note: ex.note, target }), style: { cursor: 'pointer' } }, [
+      thumb || h('div.idx', { text: i + 1 }),
       h('div.grow', {}, [
-        h('div', { text: ex.name, style: { fontWeight: 600 } }),
+        h('div', { text: `${i + 1}. ${ex.name}`, style: { fontWeight: 600 } }),
         h('div.target', { text: target }),
         last ? h('div.small.faint', { text: 'Zuletzt: ' + last.sets.map(s => `${s.weight ?? '–'}×${s.reps ?? '–'}`).join(', ') }) : null,
         ex.note ? h('div.small.muted', { text: ex.note }) : null,
       ]),
+      h('div', { html: svgIcon.chevron }),
     ]));
   });
   root.append(card);

@@ -22,6 +22,20 @@ try {
     $ctx = $listener.GetContext()
     $req = $ctx.Request; $res = $ctx.Response
     try {
+      # Test-Upload: POST /__save?name=x.png schreibt den Body nach test/out/ (nur fuer lokale Tests)
+      if ($req.HttpMethod -eq 'POST' -and $req.Url.AbsolutePath -eq '/__save') {
+        $name = [IO.Path]::GetFileName($req.QueryString['name'])
+        $outDir = Join-Path $root 'test\out'
+        if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir | Out-Null }
+        $ms = New-Object IO.MemoryStream
+        $req.InputStream.CopyTo($ms)
+        [IO.File]::WriteAllBytes((Join-Path $outDir $name), $ms.ToArray())
+        $bytes = [Text.Encoding]::UTF8.GetBytes("saved " + $ms.Length)
+        $res.ContentLength64 = $bytes.Length
+        $res.OutputStream.Write($bytes, 0, $bytes.Length)
+        Write-Host ("POST /__save " + $name + " " + $ms.Length + " bytes")
+        continue
+      }
       $rel = [Uri]::UnescapeDataString($req.Url.AbsolutePath).TrimStart('/')
       if ($rel -eq '' -or $rel.EndsWith('/')) { $rel += 'index.html' }
       $file = Join-Path $root ($rel -replace '/', '\')

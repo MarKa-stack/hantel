@@ -1,9 +1,9 @@
 // Mehr: Einstellungen, KI-Import, Datensicherung, Installation
-import { h, toast, confirmSheet, download } from '../util.js';
+import { h, svgIcon, toast, confirmSheet, download } from '../util.js';
 import { getSettings, updateSettings, exportJSON, importJSON, resetAll, getSessions, getPlans } from '../store.js';
 import { testApiKey } from '../ai-import.js';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1.0';
 
 const MODELS = [
   ['claude-opus-5', 'Claude Opus 5 – beste Erkennung (Standard)'],
@@ -15,6 +15,20 @@ export function render(root) {
   const s = getSettings();
 
   root.append(h('div.page-head', {}, [h('div', {}, [h('div.eyebrow', { text: 'Hantel' }), h('h1', { text: 'Mehr' })])]));
+
+  // ---------- Bibliothek & Vorlagen ----------
+  root.append(h('div.card.tappable', { onclick: () => { location.hash = '#/library'; } }, [
+    h('div.row.between', {}, [
+      h('div', {}, [h('div', { text: '📖 Übungsbibliothek', style: { fontWeight: 700 } }), h('div.small.faint', { text: 'Bewegungsanimationen und Ausführungstipps zu allen Übungen' })]),
+      h('div', { html: svgIcon.chevron }),
+    ]),
+  ]));
+  root.append(h('div.card.tappable', { onclick: () => { location.hash = '#/templates'; } }, [
+    h('div.row.between', {}, [
+      h('div', {}, [h('div', { text: '📋 Plan-Vorlagen', style: { fontWeight: 700 } }), h('div.small.faint', { text: 'Oberkörper / Unterkörper A+B, Zusatztag, Wochenplan' })]),
+      h('div', { html: svgIcon.chevron }),
+    ]),
+  ]));
 
   // ---------- Training ----------
   root.append(h('div.subhead', {}, [h('h2', { text: 'Training' })]));

@@ -11,6 +11,8 @@ import * as workout from './views/workout.js';
 import * as timerView from './views/timer.js';
 import * as progress from './views/progress.js';
 import * as settings from './views/settings.js';
+import * as library from './views/library.js';
+import { seedTemplates } from './templates.js';
 
 const routes = [
   { re: /^\/plans$/, view: plans, tab: 'plans' },
@@ -23,6 +25,8 @@ const routes = [
   { re: /^\/exercise\/(.+)$/, view: progress, sub: 'exercise', tab: 'progress' },
   { re: /^\/session\/([^/]+)$/, view: progress, sub: 'session', tab: 'progress' },
   { re: /^\/settings$/, view: settings, tab: 'settings' },
+  { re: /^\/library$/, view: library, tab: 'settings' },
+  { re: /^\/templates$/, view: library, sub: 'templates', tab: 'plans' },
 ];
 
 let current = null;
@@ -73,7 +77,9 @@ window.addEventListener('hashchange', render);
 // ---------- Start ----------
 
 load();
+const seeded = seedTemplates();
 render();
+if (seeded) toast(`${seeded} Trainingspläne angelegt: Oberkörper & Unterkörper A/B`, { duration: 5000 });
 
 // Laufendes Workout beim Start wieder öffnen
 if (getActiveWorkout() && !location.hash.startsWith('#/workout')) {

@@ -12,7 +12,10 @@ export function render(root, { navigate }) {
 
     root.append(h('div.page-head', {}, [
       h('div', {}, [h('div.eyebrow', { text: 'Hantel' }), h('h1', { text: 'Trainingspläne' })]),
-      h('button.btn.sm.ghost', { text: 'PDF-Import', onclick: () => navigate('/import') }),
+      h('div.row', { style: { gap: '6px' } }, [
+        h('button.btn.sm.ghost', { text: 'Vorlagen', onclick: () => navigate('/templates') }),
+        h('button.btn.sm.ghost', { text: 'PDF', onclick: () => navigate('/import') }),
+      ]),
     ]));
 
     if (active) {
@@ -33,7 +36,8 @@ export function render(root, { navigate }) {
         h('h3', { text: 'Noch kein Plan' }),
         h('p', { text: 'Leg einen Plan manuell an oder importiere deinen Trainingsplan als PDF.' }),
         h('div.stack.mt', {}, [
-          h('button.btn.primary.block', { text: 'PDF importieren', onclick: () => navigate('/import') }),
+          h('button.btn.primary.block', { text: 'Vorlagen ansehen', onclick: () => navigate('/templates') }),
+          h('button.btn.ghost.block', { text: 'PDF importieren', onclick: () => navigate('/import') }),
           h('button.btn.ghost.block', { text: 'Plan manuell anlegen', onclick: createPlan }),
         ]),
       ]));
