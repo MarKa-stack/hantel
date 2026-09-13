@@ -1,9 +1,9 @@
 // Mehr: Einstellungen, KI-Import, Datensicherung, Installation
-import { h, svgIcon, toast, confirmSheet, download } from '../util.js';
+import { h, svgIcon, toast, confirmSheet, download, isIOS } from '../util.js';
 import { getSettings, updateSettings, exportJSON, importJSON, resetAll, getSessions, getPlans } from '../store.js';
 import { testApiKey } from '../ai-import.js';
 
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.0';
 
 const MODELS = [
   ['claude-opus-5', 'Claude Opus 5 – beste Erkennung (Standard)'],
@@ -19,25 +19,24 @@ export function render(root) {
   // ---------- Bibliothek & Vorlagen ----------
   root.append(h('div.card.tappable', { onclick: () => { location.hash = '#/library'; } }, [
     h('div.row.between', {}, [
-      h('div', {}, [h('div', { text: '📖 Übungsbibliothek', style: { fontWeight: 700 } }), h('div.small.faint', { text: 'Bewegungsanimationen und Ausführungstipps zu allen Übungen' })]),
+      h('div', {}, [h('div.title-ico', { html: svgIcon.book + '<b>Übungsbibliothek</b>' }), h('div.small.faint', { text: 'Bewegungsanimationen und Ausführungstipps zu allen Übungen' })]),
       h('div', { html: svgIcon.chevron }),
     ]),
   ]));
   root.append(h('div.card.tappable', { onclick: () => { location.hash = '#/templates'; } }, [
     h('div.row.between', {}, [
-      h('div', {}, [h('div', { text: '📋 Plan-Vorlagen', style: { fontWeight: 700 } }), h('div.small.faint', { text: 'Oberkörper / Unterkörper A+B, Zusatztag, Wochenplan' })]),
+      h('div', {}, [h('div.title-ico', { html: svgIcon.clipboard + '<b>Plan-Vorlagen</b>' }), h('div.small.faint', { text: 'Oberkörper / Unterkörper A+B, Zusatztag, Wochenplan' })]),
       h('div', { html: svgIcon.chevron }),
     ]),
   ]));
   root.append(h('div.card.tappable', { onclick: () => { location.hash = '#/body'; } }, [
     h('div.row.between', {}, [
-      h('div', {}, [h('div', { text: '⚖️ Gewicht & Maße', style: { fontWeight: 700 } }), h('div.small.faint', { text: 'Körpergewicht und Umfänge mit Verlauf' })]),
+      h('div', {}, [h('div.title-ico', { html: svgIcon.scale + '<b>Gewicht & Maße</b>' }), h('div.small.faint', { text: 'Körpergewicht und Umfänge mit Verlauf' })]),
       h('div', { html: svgIcon.chevron }),
     ]),
   ]));
 
   // ---------- Training ----------
-  root.append(h('div.subhead', {}, [h('h2', { text: 'Training' })]));
   const rest = h('input.input.num', { type: 'number', inputmode: 'numeric', value: s.defaultRestSec, min: 10, max: 600, style: { width: '90px' } });
   rest.addEventListener('change', () => { const v = parseInt(rest.value, 10); if (v > 0) updateSettings({ defaultRestSec: v }); });
 
@@ -49,6 +48,19 @@ export function render(root) {
     updateSettings({ barWeight: b }); for (const x of e.target.parentNode.children) x.classList.toggle('active', x.textContent === String(b));
   } })));
 
+  const themeSeg = h('div.seg', { style: { width: '200px' } }, [['dark', 'Dunkel'], ['light', 'Hell'], ['system', 'Auto']].map(([v, l]) => h('button', { text: l, class: (s.theme || 'dark') === v ? 'active' : '', onclick: (e) => {
+    updateSettings({ theme: v }); for (const x of e.target.parentNode.children) x.classList.toggle('active', x.textContent === l);
+  } })));
+  const goalIn = h('input.input.num', { type: 'number', inputmode: 'numeric', value: s.weeklyGoal || 4, min: 1, max: 14, style: { width: '80px' } });
+  goalIn.addEventListener('change', () => { const v = parseInt(goalIn.value, 10); if (v > 0) updateSettings({ weeklyGoal: v }); });
+
+  root.append(h('div.subhead', {}, [h('h2', { text: 'Darstellung' })]));
+  root.append(h('div.card', {}, [
+    switchRow('Erscheinungsbild', 'Dunkel ist Standard – Hell oder automatisch nach System', themeSeg),
+    switchRow('Wochenziel', 'Trainings pro Woche für den Ring auf dem Startbildschirm', goalIn),
+  ]));
+
+  root.append(h('div.subhead', {}, [h('h2', { text: 'Training' })]));
   root.append(h('div.card', {}, [
     switchRow('Standard-Pause', 'Sekunden zwischen Sätzen, falls die Übung keine eigene Pause hat', rest),
     switchRow('Pausentimer automatisch', 'Startet nach jedem abgehakten Satz', toggle('autoRestTimer')),
@@ -56,7 +68,7 @@ export function render(root) {
     switchRow('Aufwärmsätze vorschlagen', '40 % × 10, 60 % × 6, 80 % × 3 vom Arbeitsgewicht (eingeklappt über Satz 1)', toggle('warmupSets')),
     switchRow('Stangengewicht', 'Standard für den Scheibenrechner (kg), pro Übung änderbar', barSeg),
     switchRow('Ton', 'Signal, wenn die Pause vorbei ist', toggle('sound')),
-    switchRow('Vibration', 'Wird auf iPhones von Safari leider nicht unterstützt', toggle('vibrate')),
+    isIOS ? null : switchRow('Vibration', 'Vibrationsmuster am Ende der Pause (Android)', toggle('vibrate')),
     switchRow('Bildschirm an lassen', 'Während Workout und Timer (Wake Lock)', toggle('wakeLock')),
     switchRow('Einheit', 'Für Gewichte', unitSeg),
   ]));
@@ -72,7 +84,7 @@ export function render(root) {
     if (!k) { toast('Bitte erst einen API-Key eintragen'); return; }
     updateSettings({ apiKey: k });
     testBtn.disabled = true; testBtn.textContent = 'Teste …';
-    try { await testApiKey(k, model.value); toast('Verbindung OK ✅'); }
+    try { await testApiKey(k, model.value); toast('Verbindung OK'); }
     catch (e) { toast('Fehler: ' + e.message, { duration: 5000 }); }
     finally { testBtn.disabled = false; testBtn.textContent = 'Verbindung testen'; }
   } });
@@ -122,7 +134,7 @@ export function render(root) {
   root.append(h('div.subhead', {}, [h('h2', { text: 'App installieren' })]));
   root.append(h('div.card', {}, [
     standalone
-      ? h('p.small.muted', { text: '✅ Hantel läuft als installierte App.' })
+      ? h('p.small.muted', { text: 'Hantel läuft als installierte App.' })
       : h('p.small.muted', { html: 'Auf dem iPhone in Safari: <b>Teilen</b> (Quadrat mit Pfeil) → <b>Zum Home-Bildschirm</b>. Danach startet Hantel wie eine normale App – auch offline.' }),
     h('p.small.faint.mt', { text: `Hantel ${APP_VERSION}` }),
   ]));

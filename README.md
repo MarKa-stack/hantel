@@ -20,7 +20,8 @@ Kein Build-Schritt, kein Backend – reines HTML/CSS/JavaScript, Daten bleiben a
 - **Übungsbibliothek**: animierte Strichfiguren (Start ↔ Endposition) mit Muskelgruppen und 2–3 Ausführungstipps zu 25 Übungen – im Plan, im Workout (ⓘ) und unter „Mehr“
 - **Vorlagen**: Oberkörper/Unterkörper A+B (4-/5-Tage-Split) werden beim ersten Start angelegt; Zusatztag Samstag optional
 - **Backup**: JSON-Export/-Import unter „Mehr“
-- **Offline** dank Service Worker, Dark/Light Mode folgt dem System
+- **Premium-Details**: Dashboard mit Wochenring/Serie/letztem PR, Display-Schrift (Space Grotesk) für Titel und Zahlen, eigenes SVG-Icon-Set, Seitenübergänge und Mikro-Animationen (Haken zeichnet sich, Einrasten, Count-up, aufleuchtende Muskelkarte; `prefers-reduced-motion` wird respektiert), fokussierter Workout-Screen (nur der aktuelle Satz groß, Pausenring inline), iOS-Splash-Screens, Haptik über switch-Checkbox (iOS 17.4+)
+- **Offline** dank Service Worker; Dark ist Standard, Hell/Auto unter „Mehr“
 
 ## Lokal testen
 

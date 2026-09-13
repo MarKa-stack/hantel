@@ -35,7 +35,7 @@ export function render(root, { navigate }) {
     const input = h('input', { type: 'file', accept: 'application/pdf,.pdf' });
     input.addEventListener('change', () => { if (input.files[0]) handleFile(input.files[0]); });
     const drop = h('label.drop.mt', {}, [
-      h('div.icon', { text: '📄' }),
+      h('div.illu', { html: svgIcon.doc, style: { width: '72px', height: '72px', borderRadius: '50%', margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)' } }),
       h('div', { text: 'PDF auswählen', style: { fontWeight: 700, color: 'var(--text)' } }),
       h('div.small', { text: 'Tippen, um eine Datei zu wählen' }),
       input,
@@ -174,7 +174,7 @@ export function render(root, { navigate }) {
           addPlan(newPlan({ name: p.name.trim() || fallbackName, exercises }));
           count++;
         }
-        toast(count ? `${count} Plan${count === 1 ? '' : 'e'} importiert 🎉` : 'Nichts importiert');
+        toast(count ? `${count} Plan${count === 1 ? '' : 'e'} importiert` : 'Nichts importiert');
         navigate('/plans');
       } }),
       h('button.btn.ghost.block', { text: 'Andere Datei wählen', onclick: drawPicker }),

@@ -157,13 +157,14 @@ function silhouette() {
 export function bodyMapSvg(side, sets, opts = {}) {
   const regions = side === 'front' ? FRONT : BACK;
   const parts = [silhouette()];
-  // Bauch-Linien (dekorativ) nur vorn
+  let idx = 0;
   for (const [region, d] of Object.entries(regions)) {
     const muscle = REGION_MUSCLE[region];
     const n = sets?.[muscle] || 0;
     const color = intensityColor(ratioFor(n, opts.mode));
     const sel = opts.selected === muscle ? ' selected' : '';
-    const style = color ? ` style="fill:${color}"` : '';
+    // --i steuert die gestaffelte Einblend-Animation („Aufleuchten“)
+    const style = color ? ` style="fill:${color};--i:${idx++}"` : '';
     parts.push(`<path class="muscle${color ? ' active' : ''}${sel}" data-muscle="${muscle}" d="${d}"${style}/>`);
     parts.push(`<path class="muscle${color ? ' active' : ''}${sel}" data-muscle="${muscle}" d="${d}"${style} transform="translate(200 0) scale(-1 1)"/>`);
   }
@@ -172,7 +173,7 @@ export function bodyMapSvg(side, sets, opts = {}) {
   } else {
     parts.push(`<path class="muscle-lines" d="M100 108 L100 232"/>`);
   }
-  return `<svg class="bodymap" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Körperkarte ${side === 'front' ? 'Vorderseite' : 'Rückseite'}">${parts.join('')}</svg>`;
+  return `<svg class="bodymap${opts.still ? " still" : ""}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Körperkarte ${side === "front" ? "Vorderseite" : "Rückseite"}">${parts.join("")}</svg>`;
 }
 
 /** Wochenstart (Montag 0:00) der Woche, in der ts liegt */

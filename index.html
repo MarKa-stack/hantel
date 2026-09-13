@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="de" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
@@ -17,6 +17,24 @@
   <link rel="icon" href="./icons/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
 
+  <!-- Startbilder (verhindern den weißen Flash beim App-Start) -->
+  <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./icons/splash/splash-1320x2868.png">
+  <link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./icons/splash/splash-1206x2622.png">
+  <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./icons/splash/splash-1290x2796.png">
+  <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./icons/splash/splash-1179x2556.png">
+  <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./icons/splash/splash-1170x2532.png">
+  <link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./icons/splash/splash-1284x2778.png">
+  <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./icons/splash/splash-1125x2436.png">
+  <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./icons/splash/splash-1242x2688.png">
+  <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="./icons/splash/splash-828x1792.png">
+  <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./icons/splash/splash-1242x2208.png">
+  <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="./icons/splash/splash-750x1334.png">
+
+  <!-- Display-Schrift für Titel und Zahlen (Body bleibt System) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="./css/app.css">
 </head>
 <body>
@@ -26,7 +44,7 @@
     <nav id="tabbar" class="tabbar" aria-label="Hauptnavigation">
       <a href="#/plans" data-tab="plans" class="tab">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3v10H4zM17 7h3v10h-3zM7 10h10v4H7zM2 9h2v6H2zM20 9h2v6h-2z"/></svg>
-        <span>Pläne</span>
+        <span>Start</span>
       </a>
       <a href="#/progress" data-tab="progress" class="tab">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8v4h2V3h-8v2h4l-6 6-4-4-8 8z"/></svg>
@@ -45,6 +63,8 @@
 
   <div id="toast" class="toast" role="status" hidden></div>
   <div id="modal-root"></div>
+  <!-- iOS 17.4+: Umschalten eines switch-Checkbox löst echtes Haptic aus → für Satz-Abschluss & Timer -->
+  <input id="haptic" type="checkbox" switch tabindex="-1" aria-hidden="true" style="position:fixed;left:-100px;top:0;width:1px;height:1px;opacity:0;pointer-events:none">
 
   <script type="module" src="./js/app.js"></script>
 </body>

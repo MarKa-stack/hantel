@@ -1,5 +1,5 @@
 // Trainingsmodus: eine Übung pro Seite, große Stepper, letztes Training + Empfehlung, PR-Erkennung
-import { h, svgIcon, fmtDuration, fmtNum, fmtDate, confirmSheet, openSheet, toast, haptic, parseNum } from '../util.js';
+import { h, svgIcon, fmtDuration, fmtNum, fmtDate, confirmSheet, openSheet, toast, haptic, parseNum, countUp, iconBox } from '../util.js';
 import { getActiveWorkout, touchWorkout, finishWorkout, cancelWorkout, getSettings, sessionVolume, getExerciseSettings, updateExerciseSettings } from '../store.js';
 import { restTimer, unlockAudio, setWakeLockWanted } from '../timer.js';
 import { recommend, detectSetPRs, sessionPRs, fmtKg, PR_LABELS, warmupSets, platesFor } from '../progression.js';
@@ -26,40 +26,34 @@ export function render(root, { navigate }) {
   cleanup.push(() => clearInterval(tickEl));
 
   const progressEl = h('div.wk-progress');
-  const restBox = h('div');
+  const restMini = h('span.rest-mini');
   root.append(h('div.workout-head', {}, [
     h('div.row.between', {}, [
       h('button.btn.sm.ghost', { text: 'Abbrechen', onclick: cancel }),
-      h('div.center.grow', {}, [h('div.title.truncate', { text: w.planName }), elapsedEl]),
+      h('div.center.grow', {}, [h('div.title.truncate', { text: w.planName }), h('div', {}, [elapsedEl, restMini])]),
       h('button.btn.sm.primary', { text: 'Beenden', onclick: finish }),
     ]),
     progressEl,
-    restBox,
   ]));
 
-  // ---------- Pausentimer-Leiste ----------
-  let restEls = null;
-  const drawRest = () => {
-    if (!restTimer.active) { restBox.innerHTML = ''; restEls = null; return; }
-    if (!restEls) {
-      restEls = { lbl: h('div.lbl'), time: h('div.time'), bar: h('div.bar') };
-      restBox.append(h('div.rest-bar', {}, [
-        h('div', {}, [restEls.lbl, restEls.time]),
-        h('div.grow'),
-        h('button.btn', { text: '+30s', onclick: () => restTimer.add(30) }),
-        h('button.btn', { text: 'Skip', onclick: () => restTimer.stop(true) }),
-        restEls.bar,
-      ]));
+  // ---------- Pausentimer: Ring inline über dem nächsten Satz, Restzeit klein im Kopf ----------
+  let restEls = null;         // Elemente des Inline-Rings (siehe restCard)
+  let restForEntry = null;    // Übung, zu der die laufende Pause gehört
+  let currentDrawSets = null; // Neuzeichnen der Satzliste der aktuellen Übung
+  const updateRest = () => {
+    restMini.textContent = restTimer.active ? ` · Pause ${fmtDuration(restTimer.remaining())}` : '';
+    if (restEls) {
+      restEls.time.textContent = fmtDuration(restTimer.remaining());
+      restEls.prog.setAttribute('stroke-dashoffset', restEls.C * restTimer.progress());
+      restEls.lbl.textContent = restTimer.running ? 'Pause' : 'Pausiert';
     }
-    restEls.lbl.textContent = restTimer.running ? 'Pause' : 'Pausiert';
-    restEls.time.textContent = fmtDuration(restTimer.remaining());
-    restEls.bar.style.width = `${(1 - restTimer.progress()) * 100}%`;
   };
-  drawRest();
   cleanup.push(restTimer.on((type) => {
-    if (type === 'done') { haptic([200, 100, 200]); restBox.innerHTML = ''; restEls = null; toast('Pause vorbei – nächster Satz!'); }
-    else drawRest();
+    if (type === 'done') { haptic([200, 100, 200]); restEls = null; restForEntry = null; toast('Pause vorbei – nächster Satz!'); currentDrawSets?.(); }
+    else if (type === 'stop' || type === 'cancel') { restEls = null; restForEntry = null; currentDrawSets?.(); }
+    updateRest();
   }));
+  updateRest();
 
   // ---------- Übungsseite ----------
   const body = h('div');
@@ -119,8 +113,8 @@ export function render(root, { navigate }) {
         supersetWith ? h('div', { style: { marginTop: '4px' } }, [h('span.pill.accent', { text: '⇅ Supersatz mit ' + supersetWith.name })]) : null,
         entry.swappedFrom ? h('div.small.faint', { text: `Getauscht (statt ${entry.swappedFrom}) – nur für heute` }) : null,
         h('div.row', { style: { marginTop: '6px', gap: '8px', flexWrap: 'wrap' } }, [
-          h('button.btn.sm.ghost', { text: 'ⓘ Ausführung', onclick: showInfo }),
-          h('button.btn.sm.ghost', { text: '⇄ Tauschen', onclick: () => swapExercise(entry) }),
+          h('button.btn.sm.ghost', { html: svgIcon.info.replace('class="ico"', 'class="ico sm"') + '<span>Ausführung</span>', onclick: showInfo }),
+          h('button.btn.sm.ghost', { html: svgIcon.swap.replace('class="ico"', 'class="ico sm"') + '<span>Tauschen</span>', onclick: () => swapExercise(entry) }),
         ]),
       ]),
     ]));
@@ -130,7 +124,7 @@ export function render(root, { navigate }) {
     const es = getExerciseSettings(entry.name);
     const setupIn = h('input.input', { type: 'text', value: es.setup || '', placeholder: 'Maschineneinstellungen: Sitz 4, Griffhöhe 3, Pin links …', style: { minHeight: '42px', fontSize: '15px' } });
     setupIn.addEventListener('change', () => updateExerciseSettings(entry.name, { setup: setupIn.value.trim() }));
-    body.append(h('div.row', { style: { marginTop: '10px', gap: '8px' } }, [h('span', { text: '🔧', style: { fontSize: '18px' } }), setupIn]));
+    body.append(h('div.row', { style: { marginTop: '10px', gap: '8px' } }, [h('span', { html: svgIcon.wrench, style: { color: 'var(--text-3)', display: 'inline-flex' } }), setupIn]));
 
     // Letztes Training + Empfehlung
     const lastEntry = rec.last?.entry, lastDate = rec.last?.session?.startedAt;
@@ -149,7 +143,7 @@ export function render(root, { navigate }) {
           h('div.lbl', { text: 'Heute empfohlen' }),
           h('div.val.rec', { text: recTxt }),
           h('div.msg', { text: rec.message }),
-          rec.decline ? h('div.msg.warn', { text: '⚠︎ Letzte Einheit lag unter deinem bisherigen Leistungsniveau. Gewicht reduzieren bleibt deine Entscheidung.' }) : null,
+          rec.decline ? h('div.msg.warn', { text: 'Letzte Einheit lag unter deinem bisherigen Leistungsniveau. Gewicht reduzieren bleibt deine Entscheidung.' }) : null,
         ]),
       ]),
     ]));
@@ -179,7 +173,7 @@ export function render(root, { navigate }) {
               h('button.btn.sm' + (ws.done ? '.ghost' : ''), { html: ws.done ? svgIcon.check : '<span>Fertig</span>', onclick: () => {
                 unlockAudio();
                 ws.done = !ws.done; touchWorkout();
-                if (ws.done && getSettings().autoRestTimer) restTimer.start(Math.min(60, entry.restSec || 60));
+                if (ws.done && getSettings().autoRestTimer) { restForEntry = entry; restTimer.start(Math.min(60, entry.restSec || 60)); }
                 drawSets();
               } }),
             ]));
@@ -187,7 +181,14 @@ export function render(root, { navigate }) {
           setsBox.append(det);
         }
       }
-      entry.sets.forEach((set, si) => setsBox.append(setCard(entry, set, si, i, drawSets)));
+      // Fokus: genau ein Satz ist „aktuell“ (groß), erledigte und kommende sind einzeilig
+      const firstOpen = entry.sets.findIndex(s => !s.done);
+      const cur = entry.expanded != null && entry.sets[entry.expanded] ? entry.expanded : (firstOpen >= 0 ? firstOpen : -1);
+      entry.sets.forEach((set, si) => {
+        if (si === cur && restTimer.active && !set.done && restForEntry === entry) setsBox.append(restCard(entry, set, si));
+        if (si === cur) setsBox.append(setCard(entry, set, si, i, drawSets));
+        else setsBox.append(setRow(entry, set, si, drawSets));
+      });
       setsBox.append(h('div.add-set', {}, [
         h('button.btn.sm.ghost', { text: '– Satz', disabled: entry.sets.length <= 1 || entry.sets[entry.sets.length - 1].done, onclick: () => { entry.sets.pop(); touchWorkout(); drawSets(); drawProgress(); drawNav(); } }),
         h('button.btn.sm.ghost', { text: '+ Satz', onclick: () => {
@@ -197,17 +198,51 @@ export function render(root, { navigate }) {
         } }),
       ]));
     };
+    currentDrawSets = drawSets;
     drawSets();
   };
 
-  // ---------- Satz-Karte mit Steppern ----------
+  // ---------- Einzeilige Sätze (erledigt / kommend) ----------
+  const setRow = (entry, set, si, redrawAll) => {
+    const row = h('div.set-row' + (set.done ? '.done' : '.upcoming'), {
+      onclick: () => { entry.expanded = si; touchWorkout(); redrawAll(); },
+    }, [
+      set.done ? h('span.mini-check', { html: svgIcon.check }) : h('span.no', { text: String(si + 1) }),
+      h('span.sum', { text: `${fmtKg(set.weight)} × ${set.reps ?? '–'}` }),
+      h('span.tag', { text: set.done ? (set.rir != null ? `RIR ${set.rir}` : 'erledigt') : `Satz ${si + 1}` }),
+    ]);
+    return row;
+  };
+
+  // ---------- Pausenring (inline über dem nächsten Satz) ----------
+  const restCard = (entry, set, si) => {
+    const R = 27, C = 2 * Math.PI * R;
+    const ringSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    ringSvg.setAttribute('viewBox', '0 0 66 66');
+    const mk = (cls, extra = '') => { const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); c.setAttribute('class', cls); c.setAttribute('cx', 33); c.setAttribute('cy', 33); c.setAttribute('r', R); if (extra) { c.setAttribute('stroke-dasharray', C); c.setAttribute('stroke-dashoffset', C * restTimer.progress()); } return c; };
+    const prog = mk('prog', 'p');
+    ringSvg.append(mk('track'), prog);
+    const time = h('div.time', { text: fmtDuration(restTimer.remaining()) });
+    const card = h('div.rest-ring.pop', {}, [
+      h('div.ringbox', {}, [ringSvg, h('div.inner', { html: svgIcon.clock })]),
+      h('div', {}, [h('div.lbl', { text: restTimer.running ? 'Pause' : 'Pausiert' }), time, h('div.next', { text: `Als Nächstes: Satz ${si + 1} · ${fmtKg(set.weight)} × ${set.reps ?? '–'}` })]),
+      h('div.btns', {}, [
+        h('button.btn.ghost', { text: '+30s', onclick: (e) => { e.stopPropagation(); restTimer.add(30); } }),
+        h('button.btn.primary', { text: 'Skip', onclick: (e) => { e.stopPropagation(); restTimer.stop(true); } }),
+      ]),
+    ]);
+    restEls = { time, prog, C, card, lbl: card.querySelector('.lbl') };
+    return card;
+  };
+
+  // ---------- Aktueller Satz: Karte mit Steppern ----------
   const setCard = (entry, set, si, exIdx, redrawAll) => {
-    const card = h('div.card.set-card' + (set.done ? '.done' : ''));
+    const card = h('div.card.set-card.current' + (set.done ? '.done' : ''));
     const step = entry.weightStep || 2.5;
     const sum = h('div.set-sum', { text: `${fmtKg(set.weight)} × ${set.reps ?? '–'}` });
     const head = h('div.set-head', {}, [
       h('div.row', { style: { gap: '8px' } }, [h('div.set-title', { text: `Satz ${si + 1}` }), sum]),
-      set.done ? h('div.check-badge', { html: svgIcon.check }) : null,
+      set.done ? h('div.check-badge', { html: svgIcon.check }) : h('span.faint.small', { text: `von ${entry.sets.length}` }),
     ]);
     card.append(head);
 
@@ -240,12 +275,13 @@ export function render(root, { navigate }) {
       onclick: () => {
         unlockAudio();
         if (set.done) {
-          set.done = false; restTimer.stop(true); touchWorkout(); redrawAll(); drawProgress(); drawNav(); return;
+          set.done = false; entry.expanded = si; restTimer.stop(true); touchWorkout(); redrawAll(); drawProgress(); drawNav(); return;
         }
         if (set.weight == null) set.weight = entry.targetWeight ?? null;
         if (set.reps == null) set.reps = parseNum(entry.targetReps) ?? null;
         set.done = true;
         set.doneAt = Date.now();
+        entry.expanded = null; // nächster offener Satz wird aktuell
         haptic(15);
         // Nächsten offenen Satz vorbelegen
         const next = entry.sets[si + 1];
@@ -261,15 +297,25 @@ export function render(root, { navigate }) {
         const isFirstOfPair = entry.superset && nextEx;
         const isSecondOfPair = prevEx?.superset;
         const isLastOverall = exIdx === w.entries.length - 1 && entry.sets.every(s => s.done);
+        let startRest = false;
         if (isFirstOfPair) {
           toast(`Supersatz: weiter mit ${nextEx.name}`, { action: { label: 'Weiter', fn: () => go(exIdx + 1) }, duration: 6000 });
         } else {
-          if (getSettings().autoRestTimer && !isLastOverall) restTimer.start(entry.restSec || getSettings().defaultRestSec);
+          startRest = getSettings().autoRestTimer && !isLastOverall;
           if (isSecondOfPair && prevEx.sets.some(s => !s.done)) {
             toast(`Nächste Runde: ${prevEx.name}`, { action: { label: 'Zurück', fn: () => go(exIdx - 1) }, duration: 6000 });
           }
         }
-        redrawAll(); drawProgress(); drawNav();
+
+        // Haken zeichnen + Karte einrasten, dann zum kompakten Layout wechseln
+        btn.innerHTML = svgIcon.checkDraw + '<span>Erledigt</span>';
+        btn.className = 'btn block set-done-btn ghost';
+        card.classList.add('snap', 'done');
+        const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        setTimeout(() => {
+          if (startRest) { restForEntry = entry; restTimer.start(entry.restSec || getSettings().defaultRestSec); }
+          redrawAll(); drawProgress(); drawNav();
+        }, reduce ? 0 : 420);
       },
     });
     card.append(btn);
@@ -378,13 +424,20 @@ export function render(root, { navigate }) {
 
     openSheet((sheet, close) => {
       const note = h('textarea.input', { placeholder: 'Wie lief’s? (optional)' });
+      // Zahlen zählen hoch
+      const setsEl = h('span'), volEl = h('span'), prEl = h('span');
+      setTimeout(() => {
+        countUp(setsEl, doneSets, { duration: 500 });
+        countUp(volEl, vol, { duration: 700, format: (v) => fmtNum(v) });
+        countUp(prEl, prs.length, { duration: 400 });
+      }, 120);
       sheet.append(
         h('h2', { text: 'Workout abschließen' }),
         h('div.stats', {}, [
           h('div.stat', {}, [h('div.val', { text: fmtDuration(dur) }), h('div.lbl', { text: 'Dauer' })]),
-          h('div.stat', {}, [h('div.val', { text: String(doneSets) }), h('div.lbl', { text: 'Sätze' })]),
-          h('div.stat', {}, [h('div.val', { html: `${fmtNum(vol)}<small>${settings.unit}</small>` }), h('div.lbl', { text: 'Volumen' })]),
-          h('div.stat', {}, [h('div.val', { text: String(prs.length) }), h('div.lbl', { text: 'Neue Rekorde' })]),
+          h('div.stat', {}, [h('div.val', {}, [setsEl]), h('div.lbl', { text: 'Sätze' })]),
+          h('div.stat', {}, [h('div.val', {}, [volEl, h('small', { text: settings.unit })]), h('div.lbl', { text: 'Volumen' })]),
+          h('div.stat', {}, [h('div.val', {}, [prEl]), h('div.lbl', { text: 'Neue Rekorde' })]),
         ]),
         h('div.subhead', { style: { margin: '14px 0 8px' } }, [h('h2', { text: 'Trainierte Muskeln' })]),
         h('div.grid-2', {}, [
@@ -393,7 +446,7 @@ export function render(root, { navigate }) {
         ]),
         h('div.small.muted', { style: { marginTop: '8px' }, text: trained.map(([k, n]) => `${MUSCLE_NAME[k]} ${fmtSets(n)}`).join(' · ') }),
         prs.length ? h('div.card.mt', {}, prs.map(p => h('div.pr-row', {}, [
-          h('div', {}, [h('div', { text: '🏆 ' + p.name, style: { fontWeight: 600 } }), h('div.sub', { text: PR_LABELS[p.type] })]),
+          h('div', {}, [h('div', { text: p.name, style: { fontWeight: 600 } }), h('div.sub', { text: PR_LABELS[p.type] })]),
           h('div.val', { text: p.type === 'volume' ? `${fmtNum(p.value)} ${settings.unit}` : p.type === 'e1rm' ? `${fmtKg(Math.round(p.value * 10) / 10)} 1RM` : `${fmtKg(p.weight)} × ${p.reps}` }),
         ]))) : null,
         h('div.field.mt', {}, [h('label', { text: 'Notiz' }), note]),
@@ -403,7 +456,7 @@ export function render(root, { navigate }) {
             close();
             restTimer.stop(true);
             const s = finishWorkout(note.value.trim());
-            toast(prs.length ? `Gespeichert – ${prs.length} neue${prs.length === 1 ? 'r' : ''} Rekord${prs.length === 1 ? '' : 'e'}! 🏆` : 'Workout gespeichert 💪');
+            toast(prs.length ? `Gespeichert – ${prs.length} neue${prs.length === 1 ? 'r' : ''} Rekord${prs.length === 1 ? '' : 'e'}!` : 'Workout gespeichert ');
             navigate('/session/' + s.id + '?fresh=1', true);
           } }),
         ]),
@@ -469,7 +522,7 @@ export function showPrToast(name, prs) {
     else if (p.type === 'weight') lines.push(h('div.pr-sub.pr-delta', { text: 'Höchstes Gewicht bei dieser Übung' }));
   }
   const el = h('div.pr-toast', { role: 'status' }, [
-    h('div.pr-head', { html: '<span>🏆</span><span>Neuer PR</span>' }),
+    h('div.pr-head', { html: svgIcon.trophy.replace('class="ico"', 'class="ico sm"') + '<span>Neuer PR</span>' }),
     h('div.pr-name', { text: name }),
     ...lines,
   ]);

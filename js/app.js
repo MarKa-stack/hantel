@@ -1,6 +1,6 @@
 // Einstieg: Router, Tab-Bar, Service Worker
-import { load, getActiveWorkout, subscribe } from './store.js';
-import { toast } from './util.js';
+import { load, getActiveWorkout, subscribe, getSettings } from './store.js';
+import { toast, h, illustration } from './util.js';
 import { restTimer } from './timer.js';
 
 import * as plans from './views/plans.js';
@@ -57,12 +57,17 @@ function render() {
   }
   if (!match) { navigate('/plans', true); return; }
 
-  // Laufendes Workout hat Vorrang, wenn man "Pläne" öffnet und gerade trainiert → Hinweis statt Umleitung
   if (current?.view?.unmount) { try { current.view.unmount(); } catch (e) { console.error(e); } }
-  current = { view: match.view, path };
+
+  // Übergang: Detailseite im selben Tab → Slide von rechts, zurück zur Tab-Wurzel → Slide von links, Tab-Wechsel → Fade
+  const isRoot = ROOTS.has(path);
+  const sameTab = current && current.tab === match.tab;
+  const kind = !current ? 'fade' : sameTab ? (isRoot && !current.isRoot ? 'back' : !isRoot ? 'slide' : 'fade') : 'fade';
+  current = { view: match.view, path, tab: match.tab, isRoot };
 
   viewEl.innerHTML = '';
   viewEl.scrollTop = 0;
+  viewEl.classList.remove('enter-slide', 'enter-fade', 'enter-back');
   viewEl.classList.toggle('no-tabbar', match.tab === null);
   tabbar.classList.toggle('hidden', match.tab === null);
   for (const a of tabbar.querySelectorAll('.tab')) a.classList.toggle('active', a.dataset.tab === match.tab);
@@ -71,15 +76,31 @@ function render() {
     match.view.render(viewEl, { params, query, sub: match.sub, navigate });
   } catch (e) {
     console.error(e);
-    viewEl.innerHTML = `<div class="empty"><div class="icon">💥</div><h3>Da ist was schiefgelaufen</h3><p>${e.message}</p></div>`;
+    viewEl.innerHTML = '';
+    viewEl.append(h('div.empty', {}, [illustration('warning'), h('h3', { text: 'Da ist was schiefgelaufen' }), h('p', { text: e.message })]));
   }
+  void viewEl.offsetWidth; // Animation neu starten
+  viewEl.classList.add('enter-' + kind);
 }
+
+const ROOTS = new Set(['/plans', '/progress', '/timer', '/settings']);
+
+// ---------- Theme ----------
+const mqDark = window.matchMedia('(prefers-color-scheme: dark)');
+function applyTheme() {
+  const pref = getSettings().theme || 'dark';
+  const theme = pref === 'system' ? (mqDark.matches ? 'dark' : 'light') : pref;
+  document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0f1115' : '#f4f5f8');
+}
+mqDark.addEventListener?.('change', applyTheme);
 
 window.addEventListener('hashchange', render);
 
 // ---------- Start ----------
 
 load();
+applyTheme();
 const seeded = seedTemplates();
 render();
 if (seeded) toast(`${seeded} Trainingspläne angelegt: Oberkörper & Unterkörper A/B`, { duration: 5000 });
@@ -96,6 +117,7 @@ restTimer.on((type) => {
 
 subscribe((what) => {
   if (what === 'workout' && !getActiveWorkout() && location.hash.startsWith('#/workout')) navigate('/plans', true);
+  if (what === 'settings') applyTheme();
 });
 
 // ---------- Service Worker ----------

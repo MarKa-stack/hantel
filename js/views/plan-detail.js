@@ -1,5 +1,5 @@
 // Plan-Ansicht: Übungen + "Training starten"
-import { h, svgIcon, fmtWeight, confirmSheet, toast } from '../util.js';
+import { h, svgIcon, fmtWeight, confirmSheet, toast, illustration } from '../util.js';
 import { getPlan, startWorkout, getActiveWorkout, cancelWorkout, getSettings, lastPerformance } from '../store.js';
 import { unlockAudio } from '../timer.js';
 import { colorFor } from './plans.js';
@@ -43,7 +43,7 @@ export function render(root, { params, query, navigate }) {
 
   if (!plan.exercises.length) {
     root.append(h('div.empty', {}, [
-      h('div.icon', { text: '📝' }),
+      illustration('clipboard'),
       h('h3', { text: 'Keine Übungen' }),
       h('p', { text: 'Füge Übungen hinzu, um mit dem Training zu starten.' }),
       h('button.btn.primary.mt', { text: 'Übungen hinzufügen', onclick: () => navigate('/plan/' + plan.id + '/edit') }),

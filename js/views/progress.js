@@ -1,5 +1,5 @@
 // Fortschritt: Übersicht, Übungsanalyse (Kennzahlen/Zeiträume/Rekorde), Session-Detail, Muskelgruppen-Dashboard
-import { h, svg, svgIcon, fmtDuration, fmtDurationLong, fmtDate, fmtShortDate, fmtWeight, fmtNum, dateParts, weekKey, confirmSheet, toast, promptSheet, openSheet, parseNum } from '../util.js';
+import { h, svg, svgIcon, fmtDuration, fmtDurationLong, fmtDate, fmtShortDate, fmtWeight, fmtNum, dateParts, weekKey, confirmSheet, toast, promptSheet, openSheet, parseNum, illustration } from '../util.js';
 import { getSessions, getSession, deleteSession, updateSession, exerciseIndex, exerciseHistory, entryBest, sessionVolume, getSettings, getBodyLog } from '../store.js';
 import { prBaseline, sessionPRs, fmtKg, PR_LABELS, percentTable, inferWeightStep } from '../progression.js';
 import { MUSCLES, MUSCLE_NAME, muscleSets, sessionsInWeek, muscleWeekStats, bodyMapSvg, intensityColor, ratioFor } from '../muscles.js';
@@ -21,7 +21,7 @@ function renderOverview(root, { navigate }) {
 
   if (!sessions.length) {
     root.append(h('div.empty', {}, [
-      h('div.icon', { text: '📈' }),
+      illustration('chart'),
       h('h3', { text: 'Noch keine Workouts' }),
       h('p', { text: 'Sobald du dein erstes Training abschließt, siehst du hier Statistiken, Rekorde, Verlauf und deine Muskelgruppen-Bilanz.' }),
     ]));
@@ -46,7 +46,7 @@ function renderOverview(root, { navigate }) {
   root.append(h('div.card.tappable.mt', { onclick: () => navigate('/muscles') }, [
     h('div.row.between', {}, [
       h('div.grow', {}, [
-        h('div', { text: '💪 Muskelgruppen', style: { fontWeight: 700 } }),
+        h('div.title-ico', { html: svgIcon.body + '<b>Muskelgruppen</b>' }),
         h('div.small.faint', { text: top.length ? 'Diese Woche: ' + top.map(([k, n]) => `${MUSCLE_NAME[k]} ${fmtSets(n)}`).join(' · ') : 'Wochenbilanz und Körperkarte' }),
       ]),
       h('div', { html: svgIcon.chevron }),
@@ -59,7 +59,7 @@ function renderOverview(root, { navigate }) {
   root.append(h('div.card.tappable', { onclick: () => navigate('/body'), style: { marginTop: '10px' } }, [
     h('div.row.between', {}, [
       h('div.grow', {}, [
-        h('div', { text: '⚖️ Gewicht & Maße', style: { fontWeight: 700 } }),
+        h('div.title-ico', { html: svgIcon.scale + '<b>Gewicht & Maße</b>' }),
         h('div.small.faint', { text: lastBody ? `Zuletzt ${String(lastBody.weight).replace('.', ',')} kg · ${fmtShortDate(lastBody.date)}` : 'Körpergewicht und Umfänge protokollieren' }),
       ]),
       h('div', { html: svgIcon.chevron }),
@@ -71,7 +71,7 @@ function renderOverview(root, { navigate }) {
   root.append(h('div.card', {}, [heatmap(sessions, 20, navigate)]));
 
   root.append(h('div.subhead', {}, [h('h2', { text: 'Workouts pro Woche' })]));
-  root.append(h('div.card', {}, [weeklyBarChart(sessions, 12)]));
+  root.append(h('div.card', {}, [weeklyBarChart(sessions, 12, chartWidth(root))]));
 
   const idx = exerciseIndex();
   root.append(h('div.subhead', {}, [h('h2', { text: 'Übungen & Rekorde' })]));
@@ -93,6 +93,9 @@ function renderOverview(root, { navigate }) {
   for (const s of [...sessions].reverse()) list.append(sessionRow(s, settings, navigate));
   root.append(list);
 }
+
+/** Chart-Breite in CSS-Pixeln (Container minus Card-/View-Padding), damit Text nicht skaliert */
+function chartWidth(root) { return Math.max(280, (root.clientWidth || 375) - 66); }
 
 function stat(valHtml, label) {
   return h('div.stat', {}, [h('div.val', { html: valHtml }), h('div.lbl', { text: label })]);
@@ -158,7 +161,7 @@ function weekStreak(sessions) {
 // ---------- Übung: Analyse ----------
 
 const METRICS = [
-  ['weight', 'Bestes Gewicht'], ['topset', 'Top-Satz'], ['e1rm', 'e1RM'], ['volume', 'Volumen'], ['reps', 'Wdh'],
+  ['weight', 'Gewicht'], ['topset', 'Top-Satz'], ['e1rm', 'e1RM'], ['volume', 'Volumen'], ['reps', 'Wdh'],
 ];
 const PERIODS = [['1m', '1 M', 30], ['3m', '3 M', 91], ['6m', '6 M', 182], ['1y', '1 J', 365], ['all', 'Gesamt', Infinity]];
 let exMetric = 'e1rm';
@@ -188,7 +191,7 @@ function renderExercise(root, { params, navigate }) {
     };
   });
 
-  const metricSeg = h('div.seg.mt', {}, METRICS.map(([k, l]) => h('button', { text: l, class: exMetric === k ? 'active' : '', onclick: () => { exMetric = k; draw(); } })));
+  const metricSeg = h('div.seg.scroll.mt', {}, METRICS.map(([k, l]) => h('button', { text: l, class: exMetric === k ? 'active' : '', onclick: () => { exMetric = k; draw(); } })));
   const periodSeg = h('div.seg.period-seg', { style: { marginTop: '8px' } }, PERIODS.map(([k, l]) => h('button', { text: l, class: exPeriod === k ? 'active' : '', onclick: () => { exPeriod = k; draw(); } })));
   const chartBox = h('div.card.mt');
   const deltaBox = h('div.card', { style: { marginTop: '10px' } });
@@ -208,6 +211,7 @@ function renderExercise(root, { params, navigate }) {
     deltaBox.hidden = false;
     chartBox.append(h('div.small.faint', { text: METRICS.find(m => m[0] === exMetric)[1] + (exMetric === 'topset' ? ' (Gewicht des besten Satzes)' : exMetric === 'reps' ? ' (Summe pro Einheit)' : '') }));
     chartBox.append(lineChart(pts, {
+      width: chartWidth(root),
       unit: u,
       tooltip: (p) => [
         fmtDate(p.x),
@@ -227,7 +231,7 @@ function renderExercise(root, { params, navigate }) {
       h('div.big' + (delta > 0 ? '.up' : delta < 0 ? '.down' : ''), { text: (delta > 0 ? '+' : '') + fmtV(delta) }),
       h('div.muted', { text: pts.length < 2 ? 'nur eine Einheit im Zeitraum' : `in ${spanTxt}` }),
       h('div.grow'),
-      h('div.mono', { text: (pct > 0 ? '+' : '') + pct.toFixed(1).replace('.', ',') + ' %', style: { fontWeight: 700, color: delta > 0 ? 'var(--good)' : delta < 0 ? 'var(--danger)' : 'var(--text-2)' } }),
+      h('span.chip-delta' + (delta > 0 ? '' : delta < 0 ? '.down' : '.flat'), { html: (delta > 0 ? svgIcon.arrowUp.replace('class="ico"', 'class="ico sm"') : delta < 0 ? svgIcon.arrowDown.replace('class="ico"', 'class="ico sm"') : '') + '<span>' + (pct > 0 ? '+' : '') + pct.toFixed(1).replace('.', ',') + ' %</span>' }),
     ]));
   };
   draw();
@@ -259,11 +263,11 @@ function renderExercise(root, { params, navigate }) {
     h('div.grow', {}, [h('div', { text: label, style: { fontWeight: 600 } }), sub ? h('div.sub', { text: sub }) : null]),
     h('div.val', { text: val }),
   ]);
-  if (base.maxWeight) recs.append(prRow('🏋️ ' + PR_LABELS.weight, `${fmtKg(base.maxWeight.value)} × ${base.maxWeight.reps}`, fmtDate(base.maxWeight.date)));
-  if (base.e1rm) recs.append(prRow('📈 ' + PR_LABELS.e1rm, fmtKg(Math.round(base.e1rm.value * 10) / 10), `${fmtKg(base.e1rm.weight)} × ${base.e1rm.reps} · ${fmtDate(base.e1rm.date)}`));
-  if (base.sessionVolume) recs.append(prRow('📦 ' + PR_LABELS.volume, `${fmtNum(base.sessionVolume.value)} ${unit}`, fmtDate(base.sessionVolume.date)));
+  if (base.maxWeight) recs.append(prRow(PR_LABELS.weight, `${fmtKg(base.maxWeight.value)} × ${base.maxWeight.reps}`, fmtDate(base.maxWeight.date)));
+  if (base.e1rm) recs.append(prRow(PR_LABELS.e1rm, fmtKg(Math.round(base.e1rm.value * 10) / 10), `${fmtKg(base.e1rm.weight)} × ${base.e1rm.reps} · ${fmtDate(base.e1rm.date)}`));
+  if (base.sessionVolume) recs.append(prRow(PR_LABELS.volume, `${fmtNum(base.sessionVolume.value)} ${unit}`, fmtDate(base.sessionVolume.date)));
   const repsRows = [...base.repsAtWeight.entries()].sort((a, b) => b[0] - a[0]).slice(0, 4);
-  if (repsRows.length) recs.append(prRow('🔁 Meiste Wiederholungen je Gewicht', '', repsRows.map(([w, r]) => `${fmtKg(w)}: ${r.reps} Wdh`).join(' · ')));
+  if (repsRows.length) recs.append(prRow('Meiste Wiederholungen je Gewicht', '', repsRows.map(([w, r]) => `${fmtKg(w)}: ${r.reps} Wdh`).join(' · ')));
   root.append(recs);
 
   // 1RM-/Prozent-Tabelle
@@ -311,7 +315,7 @@ function renderSession(root, { params, query, navigate }) {
     h('div.grow', {}, [h('div.eyebrow', { text: fmtDate(s.startedAt, { time: true }) }), h('h1', { text: s.planName })]),
   ]));
 
-  if (fresh) root.append(h('div.card', { style: { borderColor: 'var(--good)', marginBottom: '12px' }, html: '<b>Stark! 💪</b> Workout gespeichert.' }));
+  if (fresh) root.append(h('div.card', { style: { borderColor: 'var(--good)', marginBottom: '12px' }, html: '<b>Stark!</b> Workout gespeichert.' }));
 
   const sets = s.entries.reduce((a, e) => a + e.sets.length, 0);
   root.append(h('div.stats', {}, [
@@ -333,7 +337,7 @@ function renderSession(root, { params, query, navigate }) {
   if (prs.length) {
     root.append(h('div.subhead', {}, [h('h2', { text: 'Neue Rekorde' })]));
     root.append(h('div.card', {}, prs.map(p => h('div.pr-row', {}, [
-      h('div', {}, [h('div', { text: '🏆 ' + p.name, style: { fontWeight: 600 } }), h('div.sub', { text: PR_LABELS[p.type] + (p.prev ? ` · vorher ${p.type === 'volume' ? fmtNum(p.prev) + ' ' + settings.unit : fmtKg(Math.round(p.prev * 10) / 10)}` : '') })]),
+      h('div', {}, [h('div', { text: p.name, style: { fontWeight: 600 } }), h('div.sub', { text: PR_LABELS[p.type] + (p.prev ? ` · vorher ${p.type === 'volume' ? fmtNum(p.prev) + ' ' + settings.unit : fmtKg(Math.round(p.prev * 10) / 10)}` : '') })]),
       h('div.val', { text: p.type === 'volume' ? `${fmtNum(p.value)} ${settings.unit}` : p.type === 'e1rm' ? fmtKg(Math.round(p.value * 10) / 10) : `${fmtKg(p.weight)} × ${p.reps}` }),
     ]))));
   }
@@ -437,6 +441,7 @@ function renderMuscles(root, { navigate }) {
   const barsCard = h('div.card');
   root.append(mapWrap, h('div.legend', { html: '<span>leicht</span><i></i><span>intensiv</span>' }), sideSeg, detail, h('div.subhead', {}, [h('h2', { text: 'Deine Trainingswoche' })]), barsCard);
 
+  let firstDraw = true; // Balken nur beim ersten Aufbau von 0 animieren
   const draw = () => {
     const weekStart = weekKey(Date.now()) - mWeekOffset * 7 * 86400000;
     const wkSessions = sessionsInWeek(sessions, weekStart);
@@ -446,7 +451,7 @@ function renderMuscles(root, { navigate }) {
     weekNav.lastChild.disabled = mWeekOffset === 0;
     for (const b of sideSeg.children) b.classList.toggle('active', (b.textContent === 'Vorderseite') === (mSide === 'front'));
 
-    mapWrap.innerHTML = bodyMapSvg(mSide, ms.totals, { mode: 'week', selected: mSelected });
+    mapWrap.innerHTML = bodyMapSvg(mSide, ms.totals, { mode: 'week', selected: mSelected, still: !firstDraw });
     mapWrap.querySelectorAll('.muscle').forEach(el => el.addEventListener('click', () => { mSelected = mSelected === el.dataset.muscle ? null : el.dataset.muscle; draw(); }));
 
     // Detailkarte
@@ -474,7 +479,7 @@ function renderMuscles(root, { navigate }) {
       const color = intensityColor(ratioFor(n)) || 'var(--surface-3)';
       barsCard.append(h('div.mbar' + (mSelected === k ? '.selected' : ''), { onclick: () => { mSelected = mSelected === k ? null : k; draw(); } }, [
         h('div.name', { text: label }),
-        h('div.track', {}, [h('i', { style: { width: `${(n / max) * 100}%`, background: color } })]),
+        h('div.track', {}, [(() => { const bar = h('i', { style: { width: firstDraw ? '0%' : `${(n / max) * 100}%`, background: color } }); if (firstDraw) requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = `${(n / max) * 100}%`; })); return bar; })()]),
         h('div.n', { text: fmtSetsShort(n) }),
       ]));
     }
@@ -482,14 +487,15 @@ function renderMuscles(root, { navigate }) {
     if (!wkSessions.length) barsCard.append(h('p.small.muted.mt', { text: 'Keine Workouts in dieser Woche.' }));
   };
   draw();
+  firstDraw = false;
 }
 
 function fmtSetsShort(n) { return Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ','); }
 
 // ---------- Charts (SVG, eine Serie, ohne Bibliothek) ----------
 
-function weeklyBarChart(sessions, weeks) {
-  const W = 600, H = 170, padL = 28, padB = 26, padT = 20, padR = 8;
+function weeklyBarChart(sessions, weeks, W = 600) {
+  const H = 170, padL = 28, padB = 26, padT = 20, padR = 8;
   const now = weekKey(Date.now());
   const buckets = [];
   for (let i = weeks - 1; i >= 0; i--) {
@@ -539,8 +545,8 @@ function weeklyBarChart(sessions, weeks) {
 /**
  * Linienchart mit Tooltip (mehrzeilig) – pts: [{x:ts, y:number, ...meta}]
  */
-function lineChart(pts, { unit, tooltip }) {
-  const W = 600, H = 220, padL = 46, padB = 26, padT = 16, padR = 14;
+function lineChart(pts, { unit, tooltip, width = 600 }) {
+  const W = width, H = 220, padL = 46, padB = 26, padT = 16, padR = 14;
   const root = svg('svg', { class: 'chart', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Verlauf' });
   if (!pts.length) return root;
   const plotW = W - padL - padR, plotH = H - padT - padB;

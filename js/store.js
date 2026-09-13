@@ -13,6 +13,8 @@ const DEFAULT_SETTINGS = {
   unit: 'kg',
   apiKey: '',
   aiModel: 'claude-opus-5',
+  theme: 'dark',        // 'dark' | 'light' | 'system'
+  weeklyGoal: 4,        // Trainings pro Woche (Wochenring auf dem Startbildschirm)
   barWeight: 20,        // Standard-Stangengewicht für den Scheibenrechner
   keepAliveAudio: true, // Pausentimer bei gesperrtem Bildschirm (lautloses Audio)
   warmupSets: true,     // Aufwärmsätze im Training vorschlagen
