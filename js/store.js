@@ -1,5 +1,6 @@
 // Zentraler State + Persistenz (localStorage)
 import { uid, normalizeName, repsToNumber } from './util.js';
+import { recommend, weightStepFor } from './progression.js';
 
 const KEY = 'hantel.v1';
 
@@ -82,6 +83,7 @@ export function newExercise(partial = {}) {
     reps: '10',
     weight: null,
     restSec: null, // null = Standard aus Einstellungen
+    weightStep: null, // null = automatisch nach Übungstyp (2 / 2,5 / 5 kg)
     note: '',
     ...partial,
   };
@@ -152,16 +154,18 @@ export function startWorkout(planId) {
   const plan = getPlan(planId);
   if (!plan) return null;
   const entries = plan.exercises.map(ex => {
-    const last = lastPerformance(ex.name);
+    const rec = recommend(ex);
+    const last = rec.last?.entry || null;
     const n = Math.max(1, ex.sets || 1);
     const sets = [];
     for (let i = 0; i < n; i++) {
       const prev = last?.sets[i] || last?.sets[last.sets.length - 1] || null;
-      sets.push({
-        reps: prev?.reps ?? repsToNumber(ex.reps) ?? null,
-        weight: prev?.weight ?? ex.weight ?? null,
-        done: false,
-      });
+      // Gewicht: Empfehlung (Double Progression); Wdh: bei Gewichtserhöhung unteres Ende des Bereichs, sonst wie zuletzt
+      const weight = rec.weight ?? prev?.weight ?? ex.weight ?? null;
+      const reps = rec.status === 'increase'
+        ? (rec.reps?.min ?? repsToNumber(ex.reps) ?? null)
+        : (prev?.reps ?? rec.reps?.min ?? repsToNumber(ex.reps) ?? null);
+      sets.push({ reps, weight, done: false });
     }
     return {
       exerciseId: ex.id,
@@ -169,6 +173,7 @@ export function startWorkout(planId) {
       targetSets: ex.sets,
       targetReps: ex.reps,
       targetWeight: ex.weight,
+      weightStep: weightStepFor(ex),
       restSec: ex.restSec || state.settings.defaultRestSec,
       note: ex.note || '',
       sets,
@@ -180,6 +185,7 @@ export function startWorkout(planId) {
     planName: plan.name,
     startedAt: Date.now(),
     endedAt: null,
+    currentIndex: 0,
     entries,
     note: '',
   };

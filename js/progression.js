@@ -1,0 +1,198 @@
+// Double Progression, Gewichtsschritte und PR-Erkennung
+import { getSessions, e1rm, setVolume } from './store.js';
+import { normalizeName } from './util.js';
+
+// ---------- Wiederholungsbereich & Gewichtsschritt ----------
+
+/** "8-12" → {min:8, max:12}; "10" → {min:10, max:10}; "AMRAP" → null */
+export function repsRange(reps) {
+  const m = String(reps ?? '').match(/(\d+)(?:\s*[-–]\s*(\d+))?/);
+  if (!m) return null;
+  const a = parseInt(m[1], 10), b = m[2] ? parseInt(m[2], 10) : a;
+  return { min: Math.min(a, b), max: Math.max(a, b) };
+}
+
+/** Standard-Gewichtsschritt nach Übungstyp: Kurzhantel 2 kg, Maschine/Kabel 5 kg, sonst (Langhantel) 2,5 kg */
+export function inferWeightStep(name) {
+  const n = normalizeName(name);
+  if (/kurzhantel|\bkh\b|dumbbell|kurzhanteln/.test(n)) return 2;
+  if (/maschine|machine|kabel|cable|presse|press\b|latzug|pulldown|butterfly|pec deck|beinstrecker|beinbeuger|leg curl|leg extension|hip thrust|hackenschmidt|hack|beinpresse|rudern|row|flys?|fly\b|pushdown|trizepsdrücken|seitheben am kabel|wadenheben|calf|crunch/.test(n)) return 5;
+  return 2.5;
+}
+
+export function weightStepFor(exercise) {
+  const s = Number(exercise?.weightStep);
+  return s > 0 ? s : inferWeightStep(exercise?.name || '');
+}
+
+export function roundToStep(w, step) {
+  if (!step) return w;
+  return Math.round(w / step) * step;
+}
+
+export function fmtKg(w) {
+  if (w == null || isNaN(w)) return '–';
+  const n = Number(w);
+  return (Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',')) + ' kg';
+}
+
+// ---------- Verlauf einer Übung ----------
+
+/** Alle Sessions mit Sätzen dieser Übung, chronologisch (älteste zuerst) */
+export function historyFor(name, { before = Infinity } = {}) {
+  const key = normalizeName(name);
+  const out = [];
+  for (const s of getSessions()) {
+    if (s.startedAt >= before) continue;
+    const e = s.entries.find(x => normalizeName(x.name) === key);
+    if (e && e.sets.length) out.push({ session: s, entry: e });
+  }
+  return out;
+}
+
+/** Arbeitsgewicht einer Einheit: das Gewicht, mit dem die meisten Sätze gemacht wurden (bei Gleichstand das höhere) */
+export function workingWeight(entry) {
+  const counts = new Map();
+  for (const s of entry.sets) {
+    if (s.weight == null) continue;
+    const w = Number(s.weight);
+    counts.set(w, (counts.get(w) || 0) + 1);
+  }
+  let best = null, bestN = 0;
+  for (const [w, n] of counts) if (n > bestN || (n === bestN && w > best)) { best = w; bestN = n; }
+  return best;
+}
+
+// ---------- Double Progression ----------
+
+/**
+ * Empfehlung fürs nächste Training.
+ * @param {object} exercise Plan-Übung { name, sets, reps, weight, weightStep }
+ * @returns {{ weight:number|null, reps:{min,max}|null, status:string, message:string, last:object|null, decline:boolean }}
+ */
+export function recommend(exercise, opts = {}) {
+  const range = repsRange(exercise.reps);
+  const step = weightStepFor(exercise);
+  const hist = historyFor(exercise.name, opts);
+  const last = hist[hist.length - 1] || null;
+
+  if (!last) {
+    return {
+      weight: exercise.weight ?? null, reps: range, step, last: null, decline: false,
+      status: 'first', message: exercise.weight != null ? 'Erstes Training mit diesem Plan – Startgewicht aus dem Plan.' : 'Erstes Training – wähle ein Gewicht, mit dem du den Zielbereich sauber schaffst.',
+    };
+  }
+
+  const w = workingWeight(last.entry);
+  const setsAtW = last.entry.sets.filter(s => Number(s.weight) === w);
+  const targetSets = Math.max(1, exercise.sets || 1);
+
+  // Leistungsabfall gegenüber dem bisherigen Niveau (bestes e1RM davor)?
+  const lastBest = Math.max(0, ...last.entry.sets.map(s => e1rm(s.weight, s.reps)));
+  const prevBest = Math.max(0, ...hist.slice(0, -1).flatMap(h => h.entry.sets.map(s => e1rm(s.weight, s.reps))));
+  const decline = prevBest > 0 && lastBest < prevBest * 0.92;
+
+  if (w == null || !range) {
+    return { weight: w, reps: range, step, last, decline, status: 'keep', message: 'Gewicht beibehalten.' };
+  }
+
+  const allReachedMax = setsAtW.length >= targetSets && setsAtW.every(s => Number(s.reps) >= range.max);
+  if (allReachedMax) {
+    return {
+      weight: w + step, reps: range, step, last, decline: false,
+      status: 'increase', message: `Zielbereich vollständig erreicht (${targetSets} × ${range.max}). Nächste Stufe: +${fmtKg(step)}.`,
+    };
+  }
+  const anyBelowMin = setsAtW.some(s => Number(s.reps) < range.min);
+  return {
+    weight: w, reps: range, step, last, decline,
+    status: anyBelowMin ? 'below' : 'keep',
+    message: anyBelowMin
+      ? `${fmtKg(w)} beibehalten – erst alle Sätze in den Zielbereich (${range.min}–${range.max}) bringen.`
+      : `${fmtKg(w)} beibehalten und versuchen, die Wiederholungen zu steigern (Ziel: alle Sätze × ${range.max}).`,
+  };
+}
+
+// ---------- Persönliche Rekorde ----------
+
+/**
+ * Bestwerte einer Übung aus der Historie (optional zusätzlich aus bereits erledigten Sätzen des laufenden Workouts).
+ * @returns {{ maxWeight:{value,reps,date}|null, repsAtWeight:Map<number,{reps,date}>, e1rm:{value,weight,reps,date}|null, sessionVolume:{value,date}|null }}
+ */
+export function prBaseline(name, { extraSets = [], before = Infinity } = {}) {
+  const base = { maxWeight: null, repsAtWeight: new Map(), e1rm: null, sessionVolume: null };
+  const consider = (set, date) => {
+    const w = Number(set.weight), r = Number(set.reps);
+    if (!w || !r) return;
+    if (!base.maxWeight || w > base.maxWeight.value || (w === base.maxWeight.value && r > base.maxWeight.reps)) base.maxWeight = { value: w, reps: r, date };
+    const raw = base.repsAtWeight.get(w);
+    if (!raw || r > raw.reps) base.repsAtWeight.set(w, { reps: r, date });
+    const rm = e1rm(w, r);
+    if (!base.e1rm || rm > base.e1rm.value) base.e1rm = { value: rm, weight: w, reps: r, date };
+  };
+  for (const { session, entry } of historyFor(name, { before })) {
+    for (const s of entry.sets) consider(s, session.startedAt);
+    const vol = entry.sets.reduce((a, s) => a + setVolume(s), 0);
+    if (vol > 0 && (!base.sessionVolume || vol > base.sessionVolume.value)) base.sessionVolume = { value: vol, date: session.startedAt };
+  }
+  for (const s of extraSets) consider(s, Date.now());
+  return base;
+}
+
+/**
+ * Prüft einen gerade abgeschlossenen Satz auf neue Rekorde.
+ * @param {string} name Übungsname
+ * @param {{weight,reps}} set der neue Satz
+ * @param {Array} earlierSets bereits erledigte Sätze dieser Übung im laufenden Workout (ohne den neuen)
+ * @returns {Array<{type:'weight'|'reps'|'e1rm', value:number, prev:number|null, pct:number|null, weight:number, reps:number, e1rm:number}>}
+ */
+export function detectSetPRs(name, set, earlierSets = []) {
+  const w = Number(set.weight), r = Number(set.reps);
+  if (!w || !r) return [];
+  const base = prBaseline(name, { extraSets: earlierSets });
+  const rm = e1rm(w, r);
+  const out = [];
+  const pct = (v, p) => (p ? Math.round(((v - p) / p) * 1000) / 10 : null);
+  if (!base.maxWeight || w > base.maxWeight.value) {
+    out.push({ type: 'weight', value: w, prev: base.maxWeight?.value ?? null, pct: pct(w, base.maxWeight?.value), weight: w, reps: r, e1rm: rm });
+  }
+  const raw = base.repsAtWeight.get(w);
+  if (raw && r > raw.reps) {
+    out.push({ type: 'reps', value: r, prev: raw.reps, pct: null, weight: w, reps: r, e1rm: rm });
+  }
+  if (base.e1rm && rm > base.e1rm.value + 0.05) {
+    out.push({ type: 'e1rm', value: rm, prev: base.e1rm.value, pct: pct(rm, base.e1rm.value), weight: w, reps: r, e1rm: rm });
+  } else if (!base.e1rm && !out.some(p => p.type === 'weight')) {
+    // Allererster Satz der Übung überhaupt → kein "Rekord" feiern
+  }
+  return out;
+}
+
+/** Rekorde einer abgeschlossenen Session gegenüber allen früheren (für Zusammenfassung & Session-Detail) */
+export function sessionPRs(session) {
+  const out = [];
+  for (const e of session.entries) {
+    const base = prBaseline(e.name, { before: session.startedAt });
+    if (!base.maxWeight && !base.e1rm) continue; // erste Einheit dieser Übung: alles wäre "Rekord"
+    let bestW = null, bestRM = null;
+    for (const s of e.sets) {
+      const w = Number(s.weight), r = Number(s.reps);
+      if (!w || !r) continue;
+      if (!bestW || w > bestW.w) bestW = { w, r };
+      const rm = e1rm(w, r);
+      if (!bestRM || rm > bestRM.rm) bestRM = { rm, w, r };
+    }
+    if (bestW && (!base.maxWeight || bestW.w > base.maxWeight.value)) out.push({ name: e.name, type: 'weight', value: bestW.w, prev: base.maxWeight?.value ?? null, weight: bestW.w, reps: bestW.r });
+    else if (bestRM && base.e1rm && bestRM.rm > base.e1rm.value + 0.05) out.push({ name: e.name, type: 'e1rm', value: bestRM.rm, prev: base.e1rm.value, weight: bestRM.w, reps: bestRM.r });
+    const vol = e.sets.reduce((a, s) => a + setVolume(s), 0);
+    if (vol > 0 && base.sessionVolume && vol > base.sessionVolume.value) out.push({ name: e.name, type: 'volume', value: vol, prev: base.sessionVolume.value });
+  }
+  return out;
+}
+
+export const PR_LABELS = {
+  weight: 'Höchstes Gewicht',
+  reps: 'Meiste Wiederholungen bei diesem Gewicht',
+  e1rm: 'Bestes geschätztes 1RM',
+  volume: 'Höchstes Volumen in einer Einheit',
+};

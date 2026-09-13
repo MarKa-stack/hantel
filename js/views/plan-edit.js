@@ -1,6 +1,7 @@
 // Plan bearbeiten: Name, Notiz, Übungen (hinzufügen, ändern, sortieren, löschen)
 import { h, svgIcon, fmtWeight, openSheet, confirmSheet, toast, parseNum } from '../util.js';
 import { getPlan, updatePlan, newExercise, getSettings, exerciseIndex, getPlans } from '../store.js';
+import { inferWeightStep } from '../progression.js';
 
 export function render(root, { params, navigate }) {
   const plan = getPlan(params[0]);
@@ -62,6 +63,11 @@ export function render(root, { params, navigate }) {
       const weight = h('input.input.num', { type: 'text', inputmode: 'decimal', value: draft.weight ?? '', placeholder: '–' });
       const rest = h('input.input.num', { type: 'number', inputmode: 'numeric', value: draft.restSec ?? '', placeholder: String(settings.defaultRestSec) });
       const note = h('input.input', { type: 'text', value: draft.note || '', placeholder: 'Tempo, Hinweise …' });
+      const stepSel = h('select.input', {}, [
+        h('option', { value: '', text: `Automatisch (${String(inferWeightStep(draft.name || '')).replace('.', ',')} kg)` }),
+        ...[1, 1.25, 2, 2.5, 5, 10].map(v => h('option', { value: String(v), text: `${String(v).replace('.', ',')} kg`, selected: draft.weightStep === v })),
+      ]);
+      name.addEventListener('input', () => { if (!stepSel.value) stepSel.firstChild.textContent = `Automatisch (${String(inferWeightStep(name.value)).replace('.', ',')} kg)`; });
 
       const save = () => {
         const n = name.value.trim();
@@ -71,6 +77,7 @@ export function render(root, { params, navigate }) {
         draft.reps = reps.value.trim() || '10';
         draft.weight = parseNum(weight.value);
         draft.restSec = parseInt(rest.value, 10) || null;
+        draft.weightStep = parseNum(stepSel.value);
         draft.note = note.value.trim();
         if (isNew) plan.exercises.push(draft);
         else Object.assign(ex, draft);
@@ -96,6 +103,7 @@ export function render(root, { params, navigate }) {
             h('div.field', {}, [h('label', { text: settings.unit }), weight]),
             h('div.field', {}, [h('label', { text: 'Pause s' }), rest]),
           ]),
+          h('div.field', {}, [h('label', { text: 'Gewichtsschritt (Progression)' }), stepSel]),
           h('div.field', {}, [h('label', { text: 'Notiz' }), note]),
         ]),
         !isNew ? h('div.row.mt', {}, [

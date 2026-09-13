@@ -3,7 +3,7 @@ import { h, svgIcon, toast, confirmSheet, download } from '../util.js';
 import { getSettings, updateSettings, exportJSON, importJSON, resetAll, getSessions, getPlans } from '../store.js';
 import { testApiKey } from '../ai-import.js';
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 
 const MODELS = [
   ['claude-opus-5', 'Claude Opus 5 – beste Erkennung (Standard)'],

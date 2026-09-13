@@ -15,6 +15,7 @@ export const EXERCISES = [
   // ================= OBERKÖRPER =================
   {
     id: 'brustpresse', name: 'Brustpresse',
+    primary: ['chest'], secondary: ['triceps','front_delt'],
     aliases: ['brustpresse', 'chest press', 'brustpresse maschine', 'bankdrücken maschine'],
     muscles: 'Brust, vordere Schulter, Trizeps',
     tips: [
@@ -31,6 +32,7 @@ export const EXERCISES = [
   },
   {
     id: 'latzug-neutral', name: 'Latzug, neutraler Griff',
+    primary: ['back'], secondary: ['biceps','rear_delt'],
     aliases: ['latzug neutraler griff', 'latzug neutral', 'latziehen neutral', 'lat pulldown neutral'],
     muscles: 'Latissimus, unterer Trapez, Bizeps',
     tips: [
@@ -42,6 +44,7 @@ export const EXERCISES = [
   },
   {
     id: 'latzug-breit', name: 'Latzug, schulterbreiter Griff',
+    primary: ['back'], secondary: ['biceps','rear_delt'],
     aliases: ['latzug schulterbreiter griff', 'latzug schulterbreit', 'latzug breit', 'latzug', 'latziehen', 'lat pulldown', 'latzug zur brust'],
     muscles: 'Latissimus, oberer Rücken, Bizeps',
     tips: [
@@ -60,6 +63,7 @@ export const EXERCISES = [
   },
   {
     id: 'rudern-brustgestuetzt', name: 'Rudern, brustgestützt',
+    primary: ['back'], secondary: ['biceps','rear_delt'],
     aliases: ['rudern brustgestützt', 'brustgestütztes rudern', 'chest supported row', 'rudern maschine'],
     muscles: 'Oberer Rücken, Latissimus, hintere Schulter, Bizeps',
     tips: [
@@ -77,6 +81,7 @@ export const EXERCISES = [
   },
   {
     id: 'kabel-flys', name: 'Kabel-Flys',
+    primary: ['chest'], secondary: ['front_delt'],
     aliases: ['kabel flys', 'kabelflys', 'cable fly', 'cable flys', 'fliegende am kabel', 'kabelzug fliegende', 'flys'],
     muscles: 'Brust, vordere Schulter',
     tips: [
@@ -93,6 +98,7 @@ export const EXERCISES = [
   },
   {
     id: 'seitheben-kabel', name: 'Seitheben am Kabel',
+    primary: ['side_delt'], secondary: [],
     aliases: ['seitheben am kabel', 'seitheben kabel', 'kabel seitheben', 'cable lateral raise', 'seitheben einarmig'],
     muscles: 'Seitliche Schulter',
     tips: [
@@ -109,6 +115,7 @@ export const EXERCISES = [
   },
   {
     id: 'reverse-flys', name: 'Reverse-Flys, Maschine',
+    primary: ['rear_delt'], secondary: ['back'],
     aliases: ['reverse flys maschine', 'reverse flys', 'reverse fly', 'butterfly reverse', 'rear delt fly', 'reverse butterfly'],
     muscles: 'Hintere Schulter, oberer Rücken (Rhomboiden, Trapez)',
     tips: [
@@ -125,6 +132,7 @@ export const EXERCISES = [
   },
   {
     id: 'bizepscurls-kabel', name: 'Bizepscurls am Kabel',
+    primary: ['biceps'], secondary: [],
     aliases: ['bizepscurls am kabel', 'bizepscurls kabel', 'kabelcurls', 'cable curl', 'bizeps kabel', 'bizepscurls', 'bizeps curls', 'curls'],
     muscles: 'Bizeps, Unterarm',
     tips: [
@@ -141,6 +149,7 @@ export const EXERCISES = [
   },
   {
     id: 'trizepsdruecken-kabel', name: 'Trizepsdrücken am Kabel',
+    primary: ['triceps'], secondary: [],
     aliases: ['trizepsdrücken am kabel', 'trizepsdrücken kabel', 'trizeps kabel', 'pushdown', 'triceps pushdown', 'trizepsdrücken', 'trizeps drücken'],
     muscles: 'Trizeps',
     tips: [
@@ -157,6 +166,7 @@ export const EXERCISES = [
   },
   {
     id: 'schraegbank-kh', name: 'Schrägbankdrücken, Kurzhanteln',
+    primary: ['chest'], secondary: ['front_delt','triceps'],
     aliases: ['schrägbankdrücken kurzhanteln', 'schrägbankdrücken kh', 'schrägbankdrücken', 'incline press', 'incline dumbbell press', 'schrägbank drücken'],
     muscles: 'Obere Brust, vordere Schulter, Trizeps',
     tips: [
@@ -176,6 +186,7 @@ export const EXERCISES = [
   },
   {
     id: 'rudern-kabel', name: 'Rudern am Kabel',
+    primary: ['back'], secondary: ['biceps','rear_delt'],
     aliases: ['rudern am kabel', 'kabelrudern', 'rudern kabel', 'seated row', 'cable row', 'rudern sitzend', 'rudern'],
     muscles: 'Latissimus, oberer Rücken, hintere Schulter, Bizeps',
     tips: [
@@ -195,6 +206,7 @@ export const EXERCISES = [
   },
   {
     id: 'butterfly', name: 'Butterfly-Maschine',
+    primary: ['chest'], secondary: ['front_delt'],
     aliases: ['butterfly maschine', 'butterfly', 'pec deck', 'brustmaschine'],
     muscles: 'Brust, vordere Schulter',
     tips: [
@@ -211,6 +223,7 @@ export const EXERCISES = [
   },
   {
     id: 'seitheben-kh', name: 'Seitheben, Kurzhanteln',
+    primary: ['side_delt'], secondary: [],
     aliases: ['seitheben kurzhanteln', 'seitheben kh', 'seitheben', 'lateral raise', 'dumbbell lateral raise', 'seitheben stehend'],
     muscles: 'Seitliche Schulter',
     tips: [
@@ -227,6 +240,7 @@ export const EXERCISES = [
   },
   {
     id: 'schraegbank-curls', name: 'Schrägbank-Bizepscurls',
+    primary: ['biceps'], secondary: [],
     aliases: ['schrägbank bizepscurls', 'schrägbankcurls', 'schrägbank curls', 'incline curl', 'incline dumbbell curl', 'schrägbank bizeps'],
     muscles: 'Bizeps (langer Kopf), Unterarm',
     tips: [
@@ -246,6 +260,7 @@ export const EXERCISES = [
   },
   {
     id: 'ueberkopf-trizeps', name: 'Überkopf-Trizeps am Kabel',
+    primary: ['triceps'], secondary: [],
     aliases: ['überkopf trizeps am kabel', 'überkopf trizeps', 'überkopf trizepsdrücken', 'overhead triceps', 'trizeps überkopf', 'french press kabel'],
     muscles: 'Trizeps (langer Kopf)',
     tips: [
@@ -267,6 +282,7 @@ export const EXERCISES = [
   // ================= UNTERKÖRPER =================
   {
     id: 'hackenschmidt', name: 'Hackenschmidt-Kniebeuge',
+    primary: ['quads'], secondary: ['glutes'],
     aliases: ['hackenschmidt kniebeuge', 'hackenschmidt', 'hack squat', 'hackschmidt', 'hack kniebeuge'],
     muscles: 'Quadrizeps, Gesäß',
     tips: [
@@ -286,6 +302,7 @@ export const EXERCISES = [
   },
   {
     id: 'rdl', name: 'Rumänisches Kreuzheben',
+    primary: ['hamstrings'], secondary: ['glutes','back'],
     aliases: ['rumänisches kreuzheben', 'romanian deadlift', 'rdl', 'kreuzheben gestreckt', 'kreuzheben'],
     muscles: 'Beinbeuger, Gesäß, Rückenstrecker',
     tips: [
@@ -305,6 +322,7 @@ export const EXERCISES = [
   },
   {
     id: 'beinstrecker', name: 'Beinstrecker',
+    primary: ['quads'], secondary: [],
     aliases: ['beinstrecker', 'leg extension', 'beinstreckmaschine'],
     muscles: 'Quadrizeps',
     tips: [
@@ -321,6 +339,7 @@ export const EXERCISES = [
   },
   {
     id: 'beinbeuger-sitzend', name: 'Beinbeuger, sitzend',
+    primary: ['hamstrings'], secondary: [],
     aliases: ['beinbeuger sitzend', 'beinbeuger', 'seated leg curl', 'leg curl', 'beincurl', 'beinbeugemaschine'],
     muscles: 'Beinbeuger (Hamstrings)',
     tips: [
@@ -337,6 +356,7 @@ export const EXERCISES = [
   },
   {
     id: 'wadenheben-stehend', name: 'Wadenheben, stehend',
+    primary: ['calves'], secondary: [],
     aliases: ['wadenheben stehend', 'standing calf raise', 'wadenheben stehen', 'wadenheben'],
     muscles: 'Waden (Gastrocnemius)',
     tips: [
@@ -356,6 +376,7 @@ export const EXERCISES = [
   },
   {
     id: 'kabel-crunch', name: 'Kabel-Crunch',
+    primary: ['abs'], secondary: [],
     aliases: ['kabel crunch', 'kabelcrunch', 'cable crunch', 'crunch am kabel', 'crunches kabel'],
     muscles: 'Gerade Bauchmuskulatur',
     tips: [
@@ -375,6 +396,7 @@ export const EXERCISES = [
   },
   {
     id: 'beinpresse', name: 'Beinpresse',
+    primary: ['quads'], secondary: ['glutes','hamstrings'],
     aliases: ['beinpresse', 'leg press', '45 grad beinpresse', 'beinpresse 45'],
     muscles: 'Quadrizeps, Gesäß, Beinbeuger',
     tips: [
@@ -394,6 +416,7 @@ export const EXERCISES = [
   },
   {
     id: 'hip-thrust', name: 'Hip Thrust, Maschine',
+    primary: ['glutes'], secondary: ['hamstrings'],
     aliases: ['hip thrust maschine', 'hip thrust', 'hipthrust', 'hüftheben', 'glute drive'],
     muscles: 'Gesäß, Beinbeuger',
     tips: [
@@ -413,6 +436,7 @@ export const EXERCISES = [
   },
   {
     id: 'wadenheben-sitzend', name: 'Wadenheben, sitzend',
+    primary: ['calves'], secondary: [],
     aliases: ['wadenheben sitzend', 'seated calf raise', 'wadenheben im sitzen'],
     muscles: 'Waden (Soleus)',
     tips: [
@@ -432,6 +456,7 @@ export const EXERCISES = [
   },
   {
     id: 'reverse-crunch', name: 'Reverse Crunch',
+    primary: ['abs'], secondary: [],
     aliases: ['reverse crunch', 'reverse crunches', 'umgekehrter crunch', 'beinheben liegend'],
     muscles: 'Untere Bauchmuskulatur, Hüftbeuger',
     tips: [

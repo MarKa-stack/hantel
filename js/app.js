@@ -24,6 +24,7 @@ const routes = [
   { re: /^\/progress$/, view: progress, tab: 'progress' },
   { re: /^\/exercise\/(.+)$/, view: progress, sub: 'exercise', tab: 'progress' },
   { re: /^\/session\/([^/]+)$/, view: progress, sub: 'session', tab: 'progress' },
+  { re: /^\/muscles$/, view: progress, sub: 'muscles', tab: 'progress' },
   { re: /^\/settings$/, view: settings, tab: 'settings' },
   { re: /^\/library$/, view: library, tab: 'settings' },
   { re: /^\/templates$/, view: library, sub: 'templates', tab: 'plans' },

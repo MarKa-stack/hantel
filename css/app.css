@@ -557,3 +557,125 @@ details.raw pre { white-space: pre-wrap; font-size: 12px; color: var(--text-3); 
 }
 .lib-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; cursor: pointer; }
 .lib-row + .lib-row { border-top: 1px solid var(--border); }
+
+/* ------------------------------------------------------------------
+   Trainingsmodus (eine Übung pro Seite)
+   ------------------------------------------------------------------ */
+.wk-progress { display: flex; gap: 4px; margin-top: 8px; }
+.wk-progress i { flex: 1; height: 4px; border-radius: 2px; background: var(--surface-3); }
+.wk-progress i.done { background: var(--good); }
+.wk-progress i.cur { background: var(--accent); }
+.wk-step { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+
+.wk-ex { display: flex; gap: 14px; align-items: flex-start; }
+.wk-ex .fig-thumb { width: 96px; height: 78px; cursor: pointer; }
+.wk-ex .wk-name { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.15; }
+.wk-ex .wk-muscles { color: var(--text-2); font-size: 13px; margin-top: 3px; }
+.wk-ex .wk-target { font-family: var(--mono); font-size: 13px; color: var(--text-3); margin-top: 4px; }
+
+.wk-last { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wk-last .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); margin-bottom: 4px; }
+.wk-last .val { font-family: var(--mono); font-weight: 700; font-size: 15px; line-height: 1.5; }
+.wk-last .rec { color: var(--accent); font-size: 18px; }
+.wk-last .msg { font-size: 12px; color: var(--text-2); margin-top: 4px; line-height: 1.35; }
+.wk-last .warn { color: var(--warn); }
+
+.set-card { padding: 12px 14px; }
+.set-card + .set-card { margin-top: 8px; }
+.set-card.done { border-color: color-mix(in srgb, var(--good) 55%, var(--border)); background: color-mix(in srgb, var(--good) 6%, var(--surface)); }
+.set-card .set-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.set-card .set-title { font-weight: 700; font-size: 15px; }
+.set-card .set-sum { font-family: var(--mono); color: var(--text-2); font-size: 14px; }
+.set-card.done .set-sum { color: var(--good); font-weight: 700; }
+.check-badge {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--good); color: #062b16;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.check-badge svg { width: 18px; height: 18px; fill: currentColor; }
+
+.steppers { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stepper { display: flex; align-items: stretch; background: var(--surface-2); border-radius: 14px; overflow: hidden; }
+.stepper button {
+  width: 52px; border: 0; background: transparent; color: var(--text); font-size: 26px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; user-select: none; -webkit-user-select: none;
+}
+.stepper button:active { background: var(--surface-3); }
+.stepper .val {
+  flex: 1; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-family: var(--mono); font-weight: 700; font-size: 19px; cursor: text; line-height: 1;
+}
+.stepper .val small { font-size: 11px; font-weight: 600; color: var(--text-3); font-family: var(--font); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.05em; }
+.stepper input { width: 100%; text-align: center; font-family: var(--mono); font-weight: 700; font-size: 19px; border: 0; background: transparent; color: var(--text); outline: none; }
+.set-card.done .stepper { opacity: 0.6; }
+
+.set-done-btn { margin-top: 10px; }
+.wk-nav {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  padding: 10px 16px calc(var(--safe-bottom) + 10px);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  border-top: 1px solid var(--border);
+  display: flex; gap: 10px; z-index: 10;
+}
+.wk-nav .btn { flex: 1; min-height: 54px; }
+.view.wk-view { padding-bottom: calc(var(--safe-bottom) + 96px); }
+@media (min-width: 700px) { .wk-nav { left: 50%; transform: translateX(-50%); width: 100%; max-width: 680px; } }
+
+/* PR-Animation */
+.pr-toast {
+  position: fixed; top: calc(var(--safe-top) + 14px); left: 50%; transform: translateX(-50%);
+  width: calc(100% - 32px); max-width: 440px; z-index: 60;
+  background: linear-gradient(135deg, #2a1d0e, #3b2a10 60%, #2a1d0e);
+  border: 1px solid rgba(255, 200, 87, 0.55);
+  color: #fff; border-radius: 18px; padding: 14px 16px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,200,87,0.15) inset;
+  animation: pr-in 0.45s cubic-bezier(.2,.9,.2,1.1);
+  overflow: hidden;
+}
+.pr-toast::before {
+  content: ""; position: absolute; inset: -40%; background: linear-gradient(115deg, transparent 40%, rgba(255,220,120,0.22) 50%, transparent 60%);
+  animation: pr-shine 1.6s ease 0.2s 1;
+}
+.pr-toast.out { animation: pr-out 0.35s ease forwards; }
+.pr-toast .pr-head { display: flex; align-items: center; gap: 8px; font-weight: 800; letter-spacing: 0.08em; font-size: 12px; color: #ffc857; text-transform: uppercase; }
+.pr-toast .pr-name { font-size: 18px; font-weight: 800; margin-top: 4px; }
+.pr-toast .pr-val { font-family: var(--mono); font-size: 22px; font-weight: 700; margin-top: 2px; }
+.pr-toast .pr-sub { font-size: 13px; color: rgba(255,255,255,0.8); margin-top: 4px; }
+.pr-toast .pr-delta { color: #7dffb0; font-weight: 700; }
+@keyframes pr-in { from { opacity: 0; transform: translate(-50%, -24px) scale(0.96); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes pr-out { to { opacity: 0; transform: translate(-50%, -16px); } }
+@keyframes pr-shine { from { transform: translateX(-60%); } to { transform: translateX(60%); } }
+
+/* ------------------------------------------------------------------
+   Muskelgruppen & Körperkarte
+   ------------------------------------------------------------------ */
+.bodymap { width: 100%; height: auto; max-height: 420px; display: block; margin: 0 auto; }
+.bodymap .body-sil { fill: var(--surface-3); stroke: none; }
+.bodymap .body-limb { fill: none; stroke: var(--surface-3); stroke-width: 26; stroke-linecap: round; stroke-linejoin: round; }
+.bodymap .body-leg { fill: none; stroke: var(--surface-3); stroke-width: 40; stroke-linecap: round; stroke-linejoin: round; }
+.bodymap .muscle { fill: color-mix(in srgb, var(--text-3) 35%, var(--surface-3)); stroke: var(--bg); stroke-width: 1.5; cursor: pointer; transition: filter 0.15s ease; }
+.bodymap .muscle.active { filter: drop-shadow(0 0 6px rgba(255, 92, 53, 0.25)); }
+.bodymap .muscle.selected { stroke: var(--text); stroke-width: 2.5; }
+.bodymap .muscle-lines { fill: none; stroke: var(--bg); stroke-width: 1.5; opacity: 0.7; pointer-events: none; }
+.bodymap-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; }
+.bodymap-wrap.compact .bodymap { max-height: 260px; }
+
+.mbar { display: grid; grid-template-columns: 130px 1fr 52px; gap: 10px; align-items: center; padding: 8px 0; cursor: pointer; }
+.mbar + .mbar { border-top: 1px solid var(--border); }
+.mbar .name { font-weight: 600; font-size: 14px; }
+.mbar .track { height: 12px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
+.mbar .track i { display: block; height: 100%; border-radius: 6px; background: var(--accent); min-width: 0; transition: width 0.3s ease; }
+.mbar .n { font-family: var(--mono); font-weight: 700; text-align: right; font-size: 14px; }
+.mbar.selected .name { color: var(--accent); }
+.legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); margin-top: 8px; justify-content: center; }
+.legend i { width: 64px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, hsl(120,85%,52%), hsl(60,85%,50%), hsl(0,85%,46%)); }
+
+.period-seg button { font-size: 13px; }
+.delta-box { display: flex; gap: 10px; align-items: baseline; }
+.delta-box .big { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.delta-box .big.up { color: var(--good); }
+.delta-box .big.down { color: var(--danger); }
+.stats.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.stats.cols-3 .stat { padding: 10px 12px; }
+.stats.cols-3 .stat .val { font-size: 20px; }
+.stats.cols-3 .stat .lbl { font-size: 10px; }

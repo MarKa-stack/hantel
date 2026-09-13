@@ -1,42 +1,48 @@
-// Aktives Workout: Sätze abhaken, Pausentimer, Abschluss
-import { h, svgIcon, fmtDuration, fmtWeight, fmtNum, confirmSheet, openSheet, toast, haptic, parseNum } from '../util.js';
-import { getActiveWorkout, touchWorkout, finishWorkout, cancelWorkout, getSettings, sessionVolume, detectPRs, lastPerformance } from '../store.js';
+// Trainingsmodus: eine Übung pro Seite, große Stepper, letztes Training + Empfehlung, PR-Erkennung
+import { h, svgIcon, fmtDuration, fmtNum, fmtDate, confirmSheet, openSheet, toast, haptic, parseNum } from '../util.js';
+import { getActiveWorkout, touchWorkout, finishWorkout, cancelWorkout, getSettings, sessionVolume } from '../store.js';
 import { restTimer, unlockAudio, setWakeLockWanted } from '../timer.js';
+import { recommend, detectSetPRs, sessionPRs, fmtKg, PR_LABELS } from '../progression.js';
+import { findExercise } from '../exercise-db.js';
+import { muscleSets, bodyMapSvg, MUSCLE_NAME } from '../muscles.js';
 import { openExerciseInfo, figureThumb } from './exercise-info.js';
 
 let cleanup = [];
+let rootEl = null;
 
 export function render(root, { navigate }) {
   const w = getActiveWorkout();
   if (!w) { navigate('/plans', true); return; }
   const settings = getSettings();
+  rootEl = root;
+  root.classList.add('wk-view');
   setWakeLockWanted(true);
+  if (w.currentIndex == null) w.currentIndex = 0;
+  w.currentIndex = Math.max(0, Math.min(w.entries.length - 1, w.currentIndex));
 
-  // ---------- Kopf ----------
+  // ---------- Kopf (bleibt beim Blättern stehen) ----------
   const elapsedEl = h('span.elapsed', { text: fmtDuration((Date.now() - w.startedAt) / 1000) });
   const tickEl = setInterval(() => { elapsedEl.textContent = fmtDuration((Date.now() - w.startedAt) / 1000); }, 1000);
   cleanup.push(() => clearInterval(tickEl));
 
+  const progressEl = h('div.wk-progress');
   const restBox = h('div');
-  const head = h('div.workout-head', {}, [
+  root.append(h('div.workout-head', {}, [
     h('div.row.between', {}, [
       h('button.btn.sm.ghost', { text: 'Abbrechen', onclick: cancel }),
       h('div.center.grow', {}, [h('div.title.truncate', { text: w.planName }), elapsedEl]),
       h('button.btn.sm.primary', { text: 'Beenden', onclick: finish }),
     ]),
+    progressEl,
     restBox,
-  ]);
-  root.append(head);
+  ]));
 
-  // ---------- Pausentimer ----------
-  // Leiste nur einmal bauen und danach nur Werte aktualisieren (sonst startet die Animation bei jedem Tick neu)
+  // ---------- Pausentimer-Leiste ----------
   let restEls = null;
   const drawRest = () => {
     if (!restTimer.active) { restBox.innerHTML = ''; restEls = null; return; }
     if (!restEls) {
-      restEls = {
-        lbl: h('div.lbl'), time: h('div.time'), bar: h('div.bar'),
-      };
+      restEls = { lbl: h('div.lbl'), time: h('div.time'), bar: h('div.bar') };
       restBox.append(h('div.rest-bar', {}, [
         h('div', {}, [restEls.lbl, restEls.time]),
         h('div.grow'),
@@ -55,104 +61,160 @@ export function render(root, { navigate }) {
     else drawRest();
   }));
 
-  // ---------- Übungen ----------
-  const list = h('div.list');
-  root.append(list);
+  // ---------- Übungsseite ----------
+  const body = h('div');
+  root.append(body);
+  const nav = h('div.wk-nav');
+  root.append(nav);
 
-  const drawEntry = (entry, idx) => {
-    const card = h('div.card.ex-card');
-    const allDone = entry.sets.length && entry.sets.every(s => s.done);
-    card.classList.toggle('done', !!allDone);
-
-    const last = lastPerformance(entry.name);
-    const target = `Ziel: ${entry.targetSets} × ${entry.targetReps}` + (entry.targetWeight != null ? ` @ ${fmtWeight(entry.targetWeight, settings.unit)}` : '') + ` · Pause ${entry.restSec}s`;
-    const showInfo = () => openExerciseInfo(entry.name, { note: entry.note, target });
-    card.append(h('div.ex-head', {}, [
-      h('div.grow', {}, [
-        h('div.ex-name', { text: `${idx + 1}. ${entry.name}` }),
-        h('div.ex-target', { text: target }),
-        last ? h('div.ex-last', { text: 'Letztes Mal: ' + last.sets.map(s => `${s.weight ?? '–'}×${s.reps ?? '–'}`).join(' · ') }) : null,
-        entry.note ? h('div.small.muted', { text: entry.note }) : null,
-      ]),
-      h('div', { onclick: showInfo, style: { cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' } }, [
-        figureThumb(entry.name),
-        h('button.info-btn', { text: 'i', 'aria-label': 'Ausführungstipps' }),
-      ]),
-    ]));
-
-    const grid = h('div.set-grid', {}, [
-      h('div.hdr', { text: 'Satz' }), h('div.hdr', { text: settings.unit }), h('div.hdr', { text: 'Wdh' }), h('div.hdr', { text: '' }),
-    ]);
-
-    entry.sets.forEach((set, si) => {
-      const wIn = h('input.input.num', { type: 'text', inputmode: 'decimal', value: set.weight ?? '', placeholder: '–', 'aria-label': 'Gewicht' });
-      const rIn = h('input.input.num', { type: 'text', inputmode: 'numeric', value: set.reps ?? '', placeholder: '–', 'aria-label': 'Wiederholungen' });
-      wIn.addEventListener('input', () => { set.weight = parseNum(wIn.value); touchWorkout(); });
-      rIn.addEventListener('input', () => { set.reps = parseNum(rIn.value); touchWorkout(); });
-      // Enter/Weiter auf der Tastatur → nächstes Feld
-      wIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') rIn.focus(); });
-      rIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { rIn.blur(); toggle(); } });
-
-      const check = h('button.check' + (set.done ? '.on' : ''), { html: svgIcon.check, 'aria-label': 'Satz abhaken' });
-      const toggle = () => {
-        unlockAudio();
-        set.done = !set.done;
-        if (set.done) {
-          // Leere Felder mit Vorgabe füllen
-          if (set.weight == null && wIn.value === '') { set.weight = entry.targetWeight ?? null; wIn.value = set.weight ?? ''; }
-          if (set.reps == null && rIn.value === '') { set.reps = parseNum(entry.targetReps) ?? null; rIn.value = set.reps ?? ''; }
-          // Nächsten Satz vorbelegen
-          const next = entry.sets[si + 1];
-          if (next && !next.done) { if (next.weight == null) next.weight = set.weight; if (next.reps == null) next.reps = set.reps; }
-          haptic(15);
-          const isLastSetOverall = idx === w.entries.length - 1 && si === entry.sets.length - 1;
-          if (settings.autoRestTimer && !isLastSetOverall) restTimer.start(entry.restSec || settings.defaultRestSec);
-        } else {
-          restTimer.stop(true);
-        }
-        touchWorkout();
-        redraw(idx);
-      };
-      check.addEventListener('click', toggle);
-
-      const rowClass = set.done ? 'set-row done' : 'set-row';
-      const row = h('div', { class: rowClass, style: { display: 'contents' } }, [
-        h('div.setno', { text: si + 1 }), wIn, rIn, check,
-      ]);
-      // "display: contents" für Grid – Klassen zum Einfärben auf die Inputs übertragen
-      if (set.done) { wIn.classList.add('done'); rIn.classList.add('done'); wIn.style.cssText = rIn.style.cssText = 'background:var(--good-soft);border-color:transparent;color:var(--good)'; }
-      grid.append(row);
+  const drawProgress = () => {
+    progressEl.innerHTML = '';
+    w.entries.forEach((e, i) => {
+      const allDone = e.sets.length && e.sets.every(s => s.done);
+      progressEl.append(h('i', { class: i === w.currentIndex ? 'cur' : allDone ? 'done' : '' }));
     });
-    card.append(grid);
+  };
 
-    card.append(h('div.add-set', {}, [
-      h('button.btn.sm.ghost', { text: '– Satz', disabled: entry.sets.length <= 1, onclick: () => {
-        const lastSet = entry.sets[entry.sets.length - 1];
-        if (lastSet.done && entry.sets.length > 1) return;
-        entry.sets.pop(); touchWorkout(); redraw(idx);
-      } }),
-      h('button.btn.sm.ghost', { text: '+ Satz', onclick: () => {
-        const prev = entry.sets[entry.sets.length - 1];
-        entry.sets.push({ reps: prev?.reps ?? null, weight: prev?.weight ?? null, done: false });
-        touchWorkout(); redraw(idx);
-      } }),
+  const drawNav = () => {
+    nav.innerHTML = '';
+    const i = w.currentIndex, n = w.entries.length;
+    const cur = w.entries[i];
+    const curDone = cur.sets.length && cur.sets.every(s => s.done);
+    nav.append(h('button.btn.ghost', { html: svgIcon.back + '<span>Vorherige</span>', disabled: i === 0, onclick: () => go(i - 1) }));
+    if (i < n - 1) nav.append(h('button.btn' + (curDone ? '.primary' : ''), { html: '<span>Nächste Übung</span>' + svgIcon.chevron.replace('class="chev"', 'style="fill:currentColor;width:20px;height:20px"'), onclick: () => go(i + 1) }));
+    else nav.append(h('button.btn.good', { html: svgIcon.check + '<span>Training abschließen</span>', onclick: finish }));
+  };
+
+  const go = (i) => {
+    if (i < 0 || i >= w.entries.length) return;
+    w.currentIndex = i;
+    touchWorkout();
+    drawExercise();
+    root.scrollTop = 0;
+  };
+
+  const drawExercise = () => {
+    const i = w.currentIndex;
+    const entry = w.entries[i];
+    body.innerHTML = '';
+    drawProgress();
+    drawNav();
+
+    const lib = findExercise(entry.name);
+    const rec = recommend({ name: entry.name, sets: entry.targetSets, reps: entry.targetReps, weight: entry.targetWeight, weightStep: entry.weightStep });
+    const range = rec.reps;
+    const targetTxt = `${entry.targetSets} × ${entry.targetReps}` + (range ? '' : '') + ` · Pause ${fmtDuration(entry.restSec)}`;
+    const showInfo = () => openExerciseInfo(entry.name, { note: entry.note, target: targetTxt });
+
+    // Kopfbereich der Übung
+    body.append(h('div.wk-step', { text: `Übung ${i + 1} von ${w.entries.length}`, style: { margin: '4px 0 8px' } }));
+    body.append(h('div.wk-ex', {}, [
+      figureThumb(entry.name) ? h('div', { onclick: showInfo }, [figureThumb(entry.name)]) : null,
+      h('div.grow', {}, [
+        h('div.wk-name', { text: entry.name }),
+        lib ? h('div.wk-muscles', { text: lib.muscles }) : null,
+        h('div.wk-target', { text: targetTxt }),
+        h('div.row', { style: { marginTop: '6px', gap: '8px' } }, [
+          h('button.btn.sm.ghost', { text: 'ⓘ Ausführung', onclick: showInfo }),
+        ]),
+      ]),
     ]));
+    if (entry.note) body.append(h('p.small.muted', { text: entry.note, style: { marginTop: '8px' } }));
+
+    // Letztes Training + Empfehlung
+    const lastEntry = rec.last?.entry, lastDate = rec.last?.session?.startedAt;
+    const recTxt = rec.weight != null
+      ? `${fmtKg(rec.weight)} × ${range ? (range.min === range.max ? range.min : `${range.min}–${range.max}`) : entry.targetReps}`
+      : `– × ${entry.targetReps}`;
+    body.append(h('div.card.mt', {}, [
+      h('div.wk-last', {}, [
+        h('div', {}, [
+          h('div.lbl', { text: 'Letztes Training' + (lastDate ? ` · ${fmtDate(lastDate)}` : '') }),
+          lastEntry
+            ? h('div.val', { html: lastEntry.sets.map(s => `${fmtKg(s.weight)} × ${s.reps ?? '–'}`).join('<br>') })
+            : h('div.muted.small', { text: 'Noch keine Einheit protokolliert.' }),
+        ]),
+        h('div', {}, [
+          h('div.lbl', { text: 'Heute empfohlen' }),
+          h('div.val.rec', { text: recTxt }),
+          h('div.msg', { text: rec.message }),
+          rec.decline ? h('div.msg.warn', { text: '⚠︎ Letzte Einheit lag unter deinem bisherigen Leistungsniveau. Gewicht reduzieren bleibt deine Entscheidung.' }) : null,
+        ]),
+      ]),
+    ]));
+
+    // Sätze
+    const setsBox = h('div.mt');
+    body.append(setsBox);
+    const drawSets = () => {
+      setsBox.innerHTML = '';
+      entry.sets.forEach((set, si) => setsBox.append(setCard(entry, set, si, i, drawSets)));
+      setsBox.append(h('div.add-set', {}, [
+        h('button.btn.sm.ghost', { text: '– Satz', disabled: entry.sets.length <= 1 || entry.sets[entry.sets.length - 1].done, onclick: () => { entry.sets.pop(); touchWorkout(); drawSets(); drawProgress(); drawNav(); } }),
+        h('button.btn.sm.ghost', { text: '+ Satz', onclick: () => {
+          const prev = entry.sets[entry.sets.length - 1];
+          entry.sets.push({ reps: prev?.reps ?? null, weight: prev?.weight ?? null, done: false });
+          touchWorkout(); drawSets(); drawProgress(); drawNav();
+        } }),
+      ]));
+    };
+    drawSets();
+  };
+
+  // ---------- Satz-Karte mit Steppern ----------
+  const setCard = (entry, set, si, exIdx, redrawAll) => {
+    const card = h('div.card.set-card' + (set.done ? '.done' : ''));
+    const step = entry.weightStep || 2.5;
+    const sum = h('div.set-sum', { text: `${fmtKg(set.weight)} × ${set.reps ?? '–'}` });
+    const head = h('div.set-head', {}, [
+      h('div.row', { style: { gap: '8px' } }, [h('div.set-title', { text: `Satz ${si + 1}` }), sum]),
+      set.done ? h('div.check-badge', { html: svgIcon.check }) : null,
+    ]);
+    card.append(head);
+
+    const weightStepper = stepper({
+      value: set.weight, step, unit: getSettings().unit, min: 0, decimals: true,
+      onChange: (v) => { set.weight = v; sum.textContent = `${fmtKg(set.weight)} × ${set.reps ?? '–'}`; touchWorkout(); },
+    });
+    const repsStepper = stepper({
+      value: set.reps, step: 1, unit: 'Wdh', min: 0, decimals: false,
+      onChange: (v) => { set.reps = v; sum.textContent = `${fmtKg(set.weight)} × ${set.reps ?? '–'}`; touchWorkout(); },
+    });
+    card.append(h('div.steppers', {}, [weightStepper, repsStepper]));
+
+    const btn = h('button.btn.block.set-done-btn' + (set.done ? '.ghost' : '.good'), {
+      html: set.done ? '<span>Erledigt – tippen zum Zurücksetzen</span>' : svgIcon.check + '<span>Satz abschließen</span>',
+      onclick: () => {
+        unlockAudio();
+        if (set.done) {
+          set.done = false; restTimer.stop(true); touchWorkout(); redrawAll(); drawProgress(); drawNav(); return;
+        }
+        if (set.weight == null) set.weight = entry.targetWeight ?? null;
+        if (set.reps == null) set.reps = parseNum(entry.targetReps) ?? null;
+        set.done = true;
+        set.doneAt = Date.now();
+        haptic(15);
+        // Nächsten offenen Satz vorbelegen
+        const next = entry.sets[si + 1];
+        if (next && !next.done) { if (next.weight == null) next.weight = set.weight; if (next.reps == null) next.reps = set.reps; }
+        touchWorkout();
+        // PR-Erkennung gegen Historie + frühere Sätze dieses Workouts
+        const earlier = entry.sets.filter((s, j) => j !== si && s.done);
+        const prs = detectSetPRs(entry.name, set, earlier);
+        if (prs.length) { haptic([30, 40, 30]); showPrToast(entry.name, prs); }
+        // Pausentimer (nicht nach dem allerletzten Satz des Trainings)
+        const isLastOverall = exIdx === w.entries.length - 1 && entry.sets.every(s => s.done);
+        if (getSettings().autoRestTimer && !isLastOverall) restTimer.start(entry.restSec || getSettings().defaultRestSec);
+        redrawAll(); drawProgress(); drawNav();
+      },
+    });
+    card.append(btn);
     return card;
   };
 
-  const cards = [];
-  const redraw = (i) => {
-    const fresh = drawEntry(w.entries[i], i);
-    cards[i].replaceWith(fresh);
-    cards[i] = fresh;
-  };
-  w.entries.forEach((e, i) => { const c = drawEntry(e, i); cards.push(c); list.append(c); });
+  drawExercise();
 
-  root.append(h('div.mt-lg', {}, [
-    h('button.btn.good.block', { html: svgIcon.check + '<span>Workout beenden</span>', onclick: finish, style: { minHeight: '56px', fontSize: '17px' } }),
-  ]));
-
-  // ---------- Abschluss ----------
+  // ---------- Abbrechen / Abschließen ----------
   async function cancel() {
     const ok = await confirmSheet({ title: 'Workout abbrechen?', text: 'Alle Sätze dieses Workouts werden verworfen.', okLabel: 'Verwerfen', danger: true });
     if (!ok) return;
@@ -171,7 +233,9 @@ export function render(root, { navigate }) {
     const preview = { ...w, entries: w.entries.map(e => ({ ...e, sets: e.sets.filter(s => s.done) })).filter(e => e.sets.length) };
     const vol = sessionVolume(preview);
     const dur = (Date.now() - w.startedAt) / 1000;
-    const prs = detectPRs(preview);
+    const prs = sessionPRs(preview);
+    const ms = muscleSets([preview]);
+    const trained = Object.entries(ms.totals).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
 
     openSheet((sheet, close) => {
       const note = h('textarea.input', { placeholder: 'Wie lief’s? (optional)' });
@@ -179,13 +243,19 @@ export function render(root, { navigate }) {
         h('h2', { text: 'Workout abschließen' }),
         h('div.stats', {}, [
           h('div.stat', {}, [h('div.val', { text: fmtDuration(dur) }), h('div.lbl', { text: 'Dauer' })]),
-          h('div.stat', {}, [h('div.val', { html: `${doneSets}` }), h('div.lbl', { text: 'Sätze' })]),
+          h('div.stat', {}, [h('div.val', { text: String(doneSets) }), h('div.lbl', { text: 'Sätze' })]),
           h('div.stat', {}, [h('div.val', { html: `${fmtNum(vol)}<small>${settings.unit}</small>` }), h('div.lbl', { text: 'Volumen' })]),
           h('div.stat', {}, [h('div.val', { text: String(prs.length) }), h('div.lbl', { text: 'Neue Rekorde' })]),
         ]),
+        h('div.subhead', { style: { margin: '14px 0 8px' } }, [h('h2', { text: 'Trainierte Muskeln' })]),
+        h('div.grid-2', {}, [
+          h('div.bodymap-wrap.compact', { html: bodyMapSvg('front', ms.totals, { mode: 'session' }) }),
+          h('div.bodymap-wrap.compact', { html: bodyMapSvg('back', ms.totals, { mode: 'session' }) }),
+        ]),
+        h('div.small.muted', { style: { marginTop: '8px' }, text: trained.map(([k, n]) => `${MUSCLE_NAME[k]} ${fmtSets(n)}`).join(' · ') }),
         prs.length ? h('div.card.mt', {}, prs.map(p => h('div.pr-row', {}, [
-          h('div', {}, [h('div', { text: '🏆 ' + p.name, style: { fontWeight: 600 } }), h('div.sub', { text: p.type === 'weight' ? 'Neues Maximalgewicht' : 'Neues geschätztes 1RM' })]),
-          h('div.val', { text: fmtWeight(Math.round(p.value * 10) / 10, settings.unit) }),
+          h('div', {}, [h('div', { text: '🏆 ' + p.name, style: { fontWeight: 600 } }), h('div.sub', { text: PR_LABELS[p.type] })]),
+          h('div.val', { text: p.type === 'volume' ? `${fmtNum(p.value)} ${settings.unit}` : p.type === 'e1rm' ? `${fmtKg(Math.round(p.value * 10) / 10)} 1RM` : `${fmtKg(p.weight)} × ${p.reps}` }),
         ]))) : null,
         h('div.field.mt', {}, [h('label', { text: 'Notiz' }), note]),
         h('div.actions', {}, [
@@ -206,5 +276,65 @@ export function render(root, { navigate }) {
 export function unmount() {
   for (const fn of cleanup) { try { fn(); } catch { /* egal */ } }
   cleanup = [];
+  rootEl?.classList.remove('wk-view');
+  rootEl = null;
   setWakeLockWanted(false);
+}
+
+// ---------- Stepper ----------
+
+function stepper({ value, step, unit, min = 0, decimals, onChange }) {
+  let v = value == null ? null : Number(value);
+  const fmt = () => v == null ? '–' : decimals ? String(Math.round(v * 100) / 100).replace('.', ',') : String(v);
+  const valEl = h('div.val', {}, [h('span', { text: fmt() }), h('small', { text: unit })]);
+  const set = (nv) => {
+    v = nv == null ? null : Math.max(min, decimals ? Math.round(nv * 100) / 100 : Math.round(nv));
+    valEl.firstChild.textContent = fmt();
+    onChange(v);
+  };
+  const minus = h('button', { text: '−', 'aria-label': 'weniger', onclick: () => set(v == null ? 0 : v - step) });
+  const plus = h('button', { text: '+', 'aria-label': 'mehr', onclick: () => set(v == null ? step : v + step) });
+  // Tippen auf den Wert → direkt eingeben
+  valEl.addEventListener('click', () => {
+    const input = h('input', { type: 'text', inputmode: decimals ? 'decimal' : 'numeric', value: v ?? '' });
+    const commit = () => { const n = parseNum(input.value); set(n); input.replaceWith(valEl); };
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+    valEl.replaceWith(input);
+    input.focus(); input.select();
+  });
+  return h('div.stepper', {}, [minus, valEl, plus]);
+}
+
+function fmtSets(n) { return (Number.isInteger(n) ? n : n.toFixed(1).replace('.', ',')) + ' S.'; }
+
+// ---------- PR-Animation ----------
+
+let prTimer = null;
+export function showPrToast(name, prs) {
+  document.querySelector('.pr-toast')?.remove();
+  clearTimeout(prTimer);
+  // Wichtigsten Rekord wählen: e1RM (mit %), sonst Gewicht, sonst Wdh
+  const p = prs.find(x => x.type === 'e1rm') || prs.find(x => x.type === 'weight') || prs[0];
+  const lines = [];
+  if (p.type === 'reps') {
+    lines.push(h('div.pr-val', { text: `${fmtKg(p.weight)} × ${p.reps}` }));
+    lines.push(h('div.pr-sub', { text: `Meiste Wiederholungen bei ${fmtKg(p.weight)} – bisher ${p.prev}` }));
+  } else {
+    lines.push(h('div.pr-val', { text: `${fmtKg(p.weight)} × ${p.reps}` }));
+    lines.push(h('div.pr-sub', { html: `Geschätztes 1RM: <b>${fmtKg(Math.round(p.e1rm))}</b>` }));
+    const e = prs.find(x => x.type === 'e1rm');
+    if (e?.pct != null) lines.push(h('div.pr-sub.pr-delta', { text: `+${String(e.pct).replace('.', ',')} % gegenüber deinem bisherigen Rekord` }));
+    else if (p.type === 'weight' && p.prev) lines.push(h('div.pr-sub.pr-delta', { text: `Höchstes Gewicht – bisher ${fmtKg(p.prev)}` }));
+    else if (p.type === 'weight') lines.push(h('div.pr-sub.pr-delta', { text: 'Höchstes Gewicht bei dieser Übung' }));
+  }
+  const el = h('div.pr-toast', { role: 'status' }, [
+    h('div.pr-head', { html: '<span>🏆</span><span>Neuer PR</span>' }),
+    h('div.pr-name', { text: name }),
+    ...lines,
+  ]);
+  const dismiss = () => { el.classList.add('out'); setTimeout(() => el.remove(), 350); };
+  el.addEventListener('click', dismiss);
+  document.body.append(el);
+  prTimer = setTimeout(dismiss, 4500);
 }
