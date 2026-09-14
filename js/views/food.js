@@ -1,5 +1,5 @@
 // Essen: Tagebuch mit Ringen und Mahlzeiten, Lebensmittel (Basis / eigene / Open Food Facts / KI), Rezepte, Ziele
-import { h, svg, svgIcon, toast, openSheet, confirmSheet, actionSheet, parseNum, fmtDate, relativeDay, iconBox } from '../util.js';
+import { h, svg, svgIcon, toast, openSheet, confirmSheet, actionSheet, promptSheet, parseNum, fmtDate, relativeDay, iconBox } from '../util.js';
 import { getSettings, updateSettings, getFoods, saveFood, deleteFood, touchFood, getRecipes, getRecipe, saveRecipe, deleteRecipe, getDay, addDiaryEntry, updateDiaryEntry, deleteDiaryEntry, copyDiaryDay, subscribe } from '../store.js';
 import { MEALS, MEAL_NAME, ACTIVITY, GOALS, dateKey, keyToTs, macros, sumMacros, recipeTotals, searchLocal, recentItems, favoriteItems, findFood, dayTotals, mealTotals, foodEntry, recipeEntry, targets, tdee, currentWeight, adaptiveSuggestion, applyAdjustment, intakeAverage, weightTrend, fmtKcal, fmtG } from '../nutrition.js';
 import { offSearch, offByBarcode, looksLikeBarcode } from '../off.js';
@@ -47,13 +47,22 @@ function renderDay(root, { navigate, query }) {
     root.append(macroCard(tot, t, navigate));
 
     // Mahlzeiten
+    const yesterdayKey = dateKey(ts - 86400000);
     for (const [meal, label] of MEALS) {
       const entries = getDay(curKey).filter(e => e.meal === meal);
       const mt = mealTotals(curKey, meal);
       const card = h('div.card.meal-card');
+      // „⋯“: Mahlzeit als Rezept merken (z.B. das tägliche Frühstück) oder leeren
+      const menu = () => actionSheet(label, [
+        { label: 'Als Rezept speichern', fn: () => saveMealAsRecipe(entries, label) },
+        { label: 'Alle Einträge löschen', danger: true, fn: () => { for (const e of entries) deleteDiaryEntry(curKey, e.id); draw(); } },
+      ]);
       card.append(h('div.row.between', {}, [
         h('div', {}, [h('div.meal-title', { text: label }), entries.length ? h('div.small.faint', { text: `${fmtKcal(mt.kcal)} kcal · ${fmtG(mt.protein)} g Protein` }) : null]),
-        h('button.btn.sm.ghost.icon', { 'aria-label': `${label} hinzufügen`, html: svgIcon.plus, onclick: () => openAddSheet(meal, curKey, draw) }),
+        h('div.row', { style: { gap: '4px' } }, [
+          entries.length ? h('button.btn.sm.ghost.icon', { 'aria-label': 'Mehr', html: svgIcon.more, onclick: menu }) : null,
+          h('button.btn.sm.ghost.icon', { 'aria-label': `${label} hinzufügen`, html: svgIcon.plus, onclick: () => openAddSheet(meal, curKey, draw) }),
+        ]),
       ]));
       for (const e of entries) {
         card.append(h('div.food-row', { onclick: () => openEntrySheet(curKey, e, draw) }, [
@@ -64,7 +73,13 @@ function renderDay(root, { navigate, query }) {
           h('div.kcal', { text: fmtKcal(e.kcal) }),
         ]));
       }
-      if (!entries.length) card.append(h('button.food-empty', { text: 'Hinzufügen …', onclick: () => openAddSheet(meal, curKey, draw) }));
+      if (!entries.length) {
+        const yN = getDay(yesterdayKey).filter(e => e.meal === meal).length;
+        card.append(h('div.row', { style: { gap: '10px' } }, [
+          h('button.food-empty', { text: 'Hinzufügen …', style: { width: 'auto' }, onclick: () => openAddSheet(meal, curKey, draw) }),
+          yN ? h('button.btn.sm.ghost', { text: `Wie gestern (${yN})`, onclick: () => { copyDiaryDay(yesterdayKey, curKey, meal); toast(`${label} von gestern übernommen`); draw(); } }) : null,
+        ]));
+      }
       root.append(card);
     }
 
@@ -83,6 +98,26 @@ function renderDay(root, { navigate, query }) {
   };
   draw();
   unsub = subscribe((what) => { if (what === 'nutrition' && location.hash.startsWith('#/food') && !location.hash.startsWith('#/food/')) draw(); });
+}
+
+/** Geloggte Mahlzeit als Rezept (1 Portion) merken – Rezept-Einträge werden in ihre Zutaten aufgelöst */
+async function saveMealAsRecipe(entries, label) {
+  if (!entries.length) return;
+  const name = await promptSheet({ title: 'Als Rezept speichern', label: 'Name', value: `Mein ${label}`, okLabel: 'Speichern' });
+  if (!name) return;
+  const items = [];
+  for (const e of entries) {
+    if (e.kind === 'recipe') {
+      const r = getRecipe(e.refId);
+      if (r) { const f = (Number(e.servings) || 1) / Math.max(1, r.servings || 1); for (const it of r.items) items.push({ ...it, grams: Math.round(it.grams * f) }); continue; }
+    }
+    const g = Number(e.grams) || 0;
+    const per100 = findFood(e.refId)?.per100 || (g ? { kcal: e.kcal / g * 100, protein: e.protein / g * 100, carbs: e.carbs / g * 100, fat: e.fat / g * 100 } : null);
+    if (per100 && g) items.push({ foodId: e.refId, name: e.name, grams: g, per100: { ...per100 } });
+  }
+  if (!items.length) { toast('Nichts zu speichern'); return; }
+  saveRecipe({ name, servings: 1, items, note: '' });
+  toast(`„${name}“ gespeichert – ab jetzt mit zwei Tipps eintragbar`, { duration: 3500 });
 }
 
 /** Kalorienring + Makro-Balken */
