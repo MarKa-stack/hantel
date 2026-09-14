@@ -5,6 +5,7 @@ import { MEALS, MEAL_NAME, ACTIVITY, GOALS, dateKey, keyToTs, macros, sumMacros,
 import { offSearch, offByBarcode, looksLikeBarcode } from '../off.js';
 import { aiParseFood } from '../ai-food.js';
 import { openScanner, scannerAvailable } from '../scanner.js';
+import { aiReady } from '../llm.js';
 
 let curKey = dateKey();
 let unsub = null;
@@ -94,7 +95,7 @@ function renderDay(root, { navigate, query }) {
       h('button.btn.sm.ghost', { text: 'Meine Lebensmittel', onclick: () => navigate('/food/foods') }),
       h('button.btn.sm.ghost', { text: 'Ziele', onclick: () => navigate('/food/goals') }),
     ]));
-    if (!settings.apiKey) root.append(h('p.small.faint.mt', { text: 'Tipp: Mit Claude-API-Key (unter „Mehr“) kannst du Mahlzeiten und Rezepte als Freitext eintragen.' }));
+    if (!aiReady()) root.append(h('p.small.faint.mt', { text: 'Tipp: Mit einem Claude- oder OpenAI-API-Key (unter „Mehr → KI“) kannst du Mahlzeiten und Rezepte als Freitext eintragen.' }));
   };
   draw();
   unsub = subscribe((what) => { if (what === 'nutrition' && location.hash.startsWith('#/food') && !location.hash.startsWith('#/food/')) draw(); });
@@ -163,6 +164,7 @@ export function openAddSheet(meal, dayKey, onDone, opts = {}) {
     const results = h('div.results');
     let online = [];
     let onlineState = ''; // '', 'loading', 'done', 'error'
+    let onlineError = '';
     let timer = null;
 
     const pickFood = (food, presetGrams) => {
@@ -215,19 +217,19 @@ export function openAddSheet(meal, dayKey, onDone, opts = {}) {
       else if (onlineState === 'done') {
         box.append(h('div.subhead', {}, [h('h2', { text: 'Open Food Facts' })]));
         box.append(online.length ? h('div.card', {}, online.map(f => row('food', f))) : h('p.small.muted', { text: 'Keine Produkte mit vollständigen Nährwerten gefunden.' }));
-      } else if (onlineState === 'error') box.append(h('p.small.muted', { text: 'Online-Suche fehlgeschlagen – Netz?' }));
+      } else if (onlineState === 'error') box.append(h('p.small.muted', { text: onlineError || 'Online-Suche fehlgeschlagen – Netz?' }));
       else box.append(h('button.btn.ghost.block', { text: 'Online suchen (Open Food Facts)', onclick: () => searchOnline(q) }));
       results.append(box);
     };
 
     const searchOnline = async (q) => {
       onlineState = 'loading'; draw();
-      try { online = await offSearch(q); onlineState = 'done'; } catch { onlineState = 'error'; }
+      try { online = await offSearch(q); onlineState = 'done'; } catch (e) { onlineState = 'error'; onlineError = e.message; }
       draw();
     };
     const lookupBarcode = async (code) => {
       onlineState = 'loading'; draw();
-      try { const f = await offByBarcode(code); if (f) pickFood(f); else toast('EAN nicht gefunden'); onlineState = ''; } catch { onlineState = 'error'; }
+      try { const f = await offByBarcode(code); if (f) pickFood(f); else toast('EAN nicht gefunden – „Neues Lebensmittel“ mit Packungswerten anlegen', { duration: 4000 }); onlineState = ''; } catch (e) { onlineState = 'error'; onlineError = e.message; }
       draw();
     };
 
@@ -396,7 +398,7 @@ export function openFoodEditor(existing, onDone = () => {}) {
 /** Freitext → Zutatenliste zum Prüfen → ins Tagebuch oder als Rezept */
 export function openAiSheet({ meal = 'lunch', dayKey = dateKey(), onDone = () => {}, recipeMode = false, onRecipe = null }) {
   const settings = getSettings();
-  if (!settings.apiKey) { toast('Erst API-Key unter „Mehr → KI-Import“ eintragen', { duration: 4000 }); return; }
+  if (!aiReady()) { toast('Erst API-Key unter „Mehr → KI“ eintragen', { duration: 4000 }); return; }
   openSheet((sheet, close) => {
     const ta = h('textarea.input', { placeholder: recipeMode ? 'z.B. 500 g Hähnchenbrust, 200 g Philadelphia, 100 ml Sahne, 300 g Reis roh, 2 Paprika, 1 EL Öl – 4 Portionen' : 'z.B. 3 Eier, 2 Scheiben Vollkornbrot mit Butter, 1 Banane', style: { minHeight: '96px' } });
     const out = h('div');
@@ -404,8 +406,8 @@ export function openAiSheet({ meal = 'lunch', dayKey = dateKey(), onDone = () =>
     let mealSel = meal;
     const analyzeBtn = h('button.btn.primary.block', { text: 'Analysieren', onclick: async () => {
       const text = ta.value.trim(); if (!text) { ta.focus(); return; }
-      analyzeBtn.disabled = true; analyzeBtn.textContent = 'Claude rechnet …';
-      try { parsed = await aiParseFood(text, { apiKey: settings.apiKey, model: settings.aiModel || 'claude-sonnet-5' }); drawParsed(); }
+      analyzeBtn.disabled = true; analyzeBtn.textContent = 'KI rechnet …';
+      try { parsed = await aiParseFood(text); drawParsed(); }
       catch (e) { toast('Fehler: ' + e.message, { duration: 5000 }); }
       finally { analyzeBtn.disabled = false; analyzeBtn.textContent = 'Analysieren'; }
     } });
@@ -453,7 +455,7 @@ export function openAiSheet({ meal = 'lunch', dayKey = dateKey(), onDone = () =>
     };
     sheet.append(
       h('h2', { text: recipeMode ? 'Rezept per Freitext' : 'Was hast du gegessen?' }),
-      h('p.small.muted.mb', { text: 'Claude schätzt Mengen und Nährwerte – prüfen, anpassen, eintragen. Alles Erkannte landet in „Meine Lebensmittel“.' }),
+      h('p.small.muted.mb', { text: 'Die KI schätzt Mengen und Nährwerte – prüfen, anpassen, eintragen. Alles Erkannte landet in „Meine Lebensmittel“.' }),
       ta, h('div.mt', {}, [analyzeBtn]), out,
       h('div.actions', {}, [h('button.btn.block', { text: 'Schließen', onclick: close })]),
     );

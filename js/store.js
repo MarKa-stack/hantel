@@ -12,7 +12,10 @@ const DEFAULT_SETTINGS = {
   wakeLock: true,
   unit: 'kg',
   apiKey: '',
-  aiModel: 'claude-opus-5',
+  aiModel: 'claude-sonnet-5',
+  aiProvider: 'claude', // 'claude' | 'openai'
+  openaiKey: '',
+  openaiModel: 'gpt-5-mini',
   theme: 'dark',        // 'dark' | 'light' | 'system'
   weeklyGoal: 4,        // Trainings pro Woche (Wochenring auf dem Startbildschirm)
   barWeight: 20,        // Standard-Stangengewicht für den Scheibenrechner
@@ -49,7 +52,7 @@ const DEFAULT_SETTINGS = {
 
 /** Einstellungen ohne Geheimnisse (für Export/Cloud) */
 function publicSettings() {
-  const { apiKey, gistToken, ...rest } = state.settings;
+  const { apiKey, openaiKey, gistToken, ...rest } = state.settings;
   return rest;
 }
 
@@ -462,7 +465,7 @@ export function importJSON(text, { merge = true } = {}) {
   state.sessions.sort((a, b) => a.startedAt - b.startedAt);
   if (data.settings) {
     // Geheimnisse und Geräte-Zustand des anderen Geräts nicht übernehmen
-    const { apiKey, gistToken, gistId, cloudLastSync, cloudLastError, ...rest } = data.settings;
+    const { apiKey, openaiKey, gistToken, gistId, cloudLastSync, cloudLastError, ...rest } = data.settings;
     Object.assign(state.settings, rest);
   }
   if (data.exerciseSettings) Object.assign(state.exerciseSettings, data.exerciseSettings);

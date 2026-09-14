@@ -8,7 +8,7 @@ Kein Build-Schritt, kein Backend – reines HTML/CSS/JavaScript, Daten bleiben a
 - **Trainingspläne** anlegen, bearbeiten, duplizieren (Sätze × Wdh × Gewicht × Pause pro Übung)
 - **PDF-Import**: Trainingsplan als PDF auswählen → Übungen werden erkannt → prüfen → speichern
   - *Mustererkennung*: offline, erkennt Tabellen (Übung | Sätze | Wdh | Gewicht | Pause) und Freitext („Bankdrücken 3 x 10 @ 60 kg“, „3 Sätze à 12 Wdh“)
-  - *KI (optional)*: mit eigenem Claude-API-Key liest Claude das PDF direkt – auch gescannte PDFs
+  - *KI (optional)*: mit eigenem Claude- **oder OpenAI-API-Key** (Umschalter unter „Mehr → KI“, `js/llm.js`) liest die KI das PDF direkt – auch gescannte PDFs
 - **Trainingsmodus**: eine Übung pro Seite mit Bild, Zielmuskeln, Fortschritt („Übung 3 von 8“), großen ±-Steppern für Gewicht/Wdh, „Letztes Training“ + „Heute empfohlen“, feste Navigation (Vorherige/Nächste/Abschließen), Auto-Speichern, automatischer **Pausentimer** mit Ton
 - **Double Progression**: Empfehlung pro Übung aus der Historie (alle Sätze am oberen Ende des Bereichs → +Gewichtsschritt, sonst Gewicht halten); Gewichtsschritt pro Übung konfigurierbar (Standard: Kurzhantel 2 kg, Maschine/Kabel 5 kg, Langhantel 2,5 kg); Hinweis bei Leistungsabfall, Reduzierung bleibt beim Nutzer
 - **PR-Erkennung**: höchstes Gewicht, meiste Wdh je Gewicht, bestes e1RM (Epley), höchstes Einheiten-Volumen – dezente Animation direkt nach dem Satz, Bereich „Rekorde“ je Übung
@@ -87,7 +87,8 @@ js/food-db.js         Basistabelle Lebensmittel
 js/off.js             Open Food Facts (Suche, EAN)
 js/ai-food.js         KI-Freitext → Zutaten
 js/pdf-import.js      pdf.js-Textextraktion + Mustererkennung
-js/ai-import.js       Claude-API-Aufruf (PDF → JSON)
+js/llm.js             KI-Zugang: Claude oder OpenAI, JSON-Schema-Antworten
+js/ai-import.js       PDF → Trainingspläne (über llm.js)
 js/figure.js          Strichfiguren-Renderer (Posen über Gelenkwinkel, SMIL-Animation)
 js/exercise-db.js     Übungsbibliothek: Figuren, Muskeln, Tipps, Namenszuordnung
 js/templates.js       Eingebaute Plan-Vorlagen + Erststart-Seeding
@@ -103,7 +104,7 @@ icons/                App-Icons (PNG via tools/make-icons.ps1)
 plan     { id, name, note, exercises: [{ id, name, sets, reps, weight, restSec, note }] }
 session  { id, planId, planName, startedAt, endedAt, durationSec, note,
            entries: [{ exerciseId, name, sessionNote, sets: [{ reps, weight, done, rir, type }] }], deload }
-settings { defaultRestSec, autoRestTimer, sound, vibrate, wakeLock, unit, apiKey, aiModel, theme, weeklyGoal,
+settings { defaultRestSec, autoRestTimer, sound, vibrate, wakeLock, unit, apiKey, aiModel, aiProvider, openaiKey, openaiModel, theme, weeklyGoal,
            barWeight, keepAliveAudio, warmupSets, name, lastBackupAt, lastBackupSessions,
            gistToken, gistId, cloudAutoSync, deloadUntil, volumeMin, volumeMax, sex, speech,
            trainingDays, trainingTime, trainingPlanByDay, milestonesSeen }

@@ -1,18 +1,12 @@
 // Mehr: Einstellungen, KI-Import, Datensicherung, Installation
 import { h, svgIcon, toast, confirmSheet, fmtDate, isIOS, weekKey } from '../util.js';
 import { getSettings, updateSettings, importJSON, resetAll, getSessions, getPlans, deloadActive } from '../store.js';
-import { testApiKey } from '../ai-import.js';
+import { PROVIDERS, testConnection } from '../llm.js';
 import { exportBackup } from '../backup.js';
 import { cloudPush, cloudPull } from '../cloud.js';
 import { exportCSV, exportICS, WEEKDAYS_DE } from '../exporters.js';
 
-export const APP_VERSION = '1.7.2';
-
-const MODELS = [
-  ['claude-opus-5', 'Claude Opus 5 – beste Erkennung (Standard)'],
-  ['claude-sonnet-5', 'Claude Sonnet 5 – günstiger'],
-  ['claude-haiku-4-5', 'Claude Haiku 4.5 – am günstigsten'],
-];
+export const APP_VERSION = '1.8.0';
 
 export function render(root, { navigate }) {
   const s = getSettings();
@@ -97,28 +91,47 @@ export function render(root, { navigate }) {
     switchRow('Einheit', 'Für Gewichte', unitSeg),
   ]));
 
-  // ---------- KI ----------
-  root.append(h('div.subhead', {}, [h('h2', { text: 'KI-Import (optional)' })]));
-  const key = h('input.input', { type: 'password', value: s.apiKey || '', placeholder: 'sk-ant-…', autocomplete: 'off', autocapitalize: 'off', spellcheck: false });
-  key.addEventListener('change', () => updateSettings({ apiKey: key.value.trim() }));
-  const model = h('select.input', {}, MODELS.map(([v, l]) => h('option', { value: v, text: l, selected: s.aiModel === v })));
-  model.addEventListener('change', () => updateSettings({ aiModel: model.value }));
-  const testBtn = h('button.btn.ghost.block', { text: 'Verbindung testen', onclick: async () => {
-    const k = key.value.trim();
-    if (!k) { toast('Bitte erst einen API-Key eintragen'); return; }
-    updateSettings({ apiKey: k });
-    testBtn.disabled = true; testBtn.textContent = 'Teste …';
-    try { await testApiKey(k, model.value); toast('Verbindung OK'); }
-    catch (e) { toast('Fehler: ' + e.message, { duration: 5000 }); }
-    finally { testBtn.disabled = false; testBtn.textContent = 'Verbindung testen'; }
-  } });
-
-  root.append(h('div.card', {}, [
-    h('p.small.muted', { html: 'Mit einem eigenen <b>Claude-API-Key</b> liest Claude dein PDF direkt – auch gescannte oder verschachtelte Pläne. Den Key bekommst du unter <a href="https://platform.claude.com/" target="_blank" rel="noopener">platform.claude.com</a>. Er wird nur lokal auf diesem Gerät gespeichert und nie exportiert.' }),
-    h('div.field.mt', {}, [h('label', { text: 'API-Key' }), key]),
-    h('div.field.mt', {}, [h('label', { text: 'Modell' }), model]),
-    h('div.mt', {}, [testBtn]),
-  ]));
+  // ---------- KI (Claude oder OpenAI) ----------
+  root.append(h('div.subhead', {}, [h('h2', { text: 'KI (optional)' })]));
+  const aiBox = h('div');
+  const drawAi = () => {
+    const st = getSettings();
+    const provider = st.aiProvider === 'openai' ? 'openai' : 'claude';
+    const p = PROVIDERS[provider];
+    const keyField = provider === 'openai' ? 'openaiKey' : 'apiKey';
+    const modelField = provider === 'openai' ? 'openaiModel' : 'aiModel';
+    aiBox.innerHTML = '';
+    const provSeg = h('div.seg', {}, Object.entries(PROVIDERS).map(([k, v]) => h('button', { text: v.label, class: provider === k ? 'active' : '', onclick: () => { updateSettings({ aiProvider: k }); drawAi(); } })));
+    const key = h('input.input', { type: 'password', value: st[keyField] || '', placeholder: p.keyPlaceholder, autocomplete: 'off', autocapitalize: 'off', spellcheck: false });
+    key.addEventListener('change', () => updateSettings({ [keyField]: key.value.trim() }));
+    const cur = st[modelField] || p.defaultModel;
+    const known = p.models.some(([v]) => v === cur);
+    const model = h('select.input', {}, [
+      ...p.models.map(([v, l]) => h('option', { value: v, text: l, selected: cur === v })),
+      h('option', { value: '__custom', text: 'Anderes Modell …', selected: !known }),
+    ]);
+    const customIn = h('input.input', { type: 'text', value: known ? '' : cur, placeholder: 'Modell-ID, z.B. gpt-5-nano', hidden: known, autocapitalize: 'off', spellcheck: false, style: { marginTop: '8px' } });
+    model.addEventListener('change', () => { if (model.value === '__custom') { customIn.hidden = false; customIn.focus(); } else { customIn.hidden = true; updateSettings({ [modelField]: model.value }); } });
+    customIn.addEventListener('change', () => { const v = customIn.value.trim(); if (v) updateSettings({ [modelField]: v }); });
+    const testBtn = h('button.btn.ghost.block', { text: 'Verbindung testen', onclick: async () => {
+      const k = key.value.trim();
+      if (!k) { toast('Bitte erst einen API-Key eintragen'); return; }
+      updateSettings({ [keyField]: k });
+      testBtn.disabled = true; testBtn.textContent = 'Teste …';
+      try { await testConnection(); toast('Verbindung OK'); }
+      catch (e) { toast('Fehler: ' + e.message, { duration: 6000 }); }
+      finally { testBtn.disabled = false; testBtn.textContent = 'Verbindung testen'; }
+    } });
+    aiBox.append(h('div.card', {}, [
+      h('p.small.muted', { html: `Für PDF-Import und Essen-Freitext. Eigener Key von <a href="${p.keyUrl}" target="_blank" rel="noopener">${p.keyUrl.replace('https://', '')}</a> – bleibt nur auf diesem Gerät und wird nie exportiert. Kosten: wenige Cent pro Import, Bruchteile eines Cents pro Mahlzeit.` }),
+      h('div.mt', {}, [provSeg]),
+      h('div.field.mt', {}, [h('label', { text: `API-Key (${p.label})` }), key]),
+      h('div.field.mt', {}, [h('label', { text: 'Modell' }), model, customIn]),
+      h('div.mt', {}, [testBtn]),
+    ]));
+  };
+  drawAi();
+  root.append(aiBox);
 
   // ---------- Daten ----------
   root.append(h('div.subhead', {}, [h('h2', { text: 'Daten' })]));

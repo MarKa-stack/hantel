@@ -1,6 +1,6 @@
 // Service Worker: App-Shell offline verfügbar machen.
 // Bei jeder Änderung an den App-Dateien VERSION erhöhen, damit Clients aktualisieren.
-const VERSION = 'hantel-v1.7.2';
+const VERSION = 'hantel-v1.8.0';
 const SHELL = [
   './',
   './index.html',
@@ -27,6 +27,7 @@ const SHELL = [
   './js/scanner.js',
   './js/pdf-import.js',
   './js/ai-import.js',
+  './js/llm.js',
   './js/views/plans.js',
   './js/views/plan-detail.js',
   './js/views/plan-edit.js',
@@ -75,7 +76,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
 
   // API-Aufrufe nie cachen
-  if (url.hostname === 'api.anthropic.com') return;
+  if (url.hostname === 'api.anthropic.com' || url.hostname === 'api.openai.com') return;
 
   // pdf.js vom CDN und Google Fonts: Cache-first, damit es offline funktioniert, sobald einmal geladen
   if (url.hostname === 'cdnjs.cloudflare.com' || url.hostname === 'cdn.jsdelivr.net' || url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {

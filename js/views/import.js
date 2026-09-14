@@ -3,12 +3,13 @@ import { h, svgIcon, toast, parseNum } from '../util.js';
 import { addPlan, newPlan, newExercise, getSettings } from '../store.js';
 import { extractLines, parsePlanText } from '../pdf-import.js';
 import { aiExtractPlans } from '../ai-import.js';
+import { aiReady, aiConfig } from '../llm.js';
 
 let mode = 'pattern';
 
 export function render(root, { navigate }) {
   const settings = getSettings();
-  if (mode === 'ai' && !settings.apiKey) mode = 'pattern';
+  if (mode === 'ai' && !aiReady()) mode = 'pattern';
 
   root.append(h('button.back', { html: svgIcon.back + '<span>Pläne</span>', onclick: () => navigate('/plans') }));
   root.append(h('div.page-head', {}, [h('div', {}, [h('div.eyebrow', { text: 'Import' }), h('h1', { text: 'Trainingsplan aus PDF' })])]));
@@ -22,14 +23,14 @@ export function render(root, { navigate }) {
     const seg = h('div.seg', {}, [
       h('button', { text: 'Mustererkennung', class: mode === 'pattern' ? 'active' : '', onclick: () => { mode = 'pattern'; drawPicker(); } }),
       h('button', { text: 'KI (Claude)', class: mode === 'ai' ? 'active' : '', onclick: () => {
-        if (!settings.apiKey) { toast('Erst API-Key unter „Mehr“ hinterlegen', { action: { label: 'Zu Mehr', fn: () => navigate('/settings') } }); return; }
+        if (!aiReady()) { toast('Erst API-Key unter „Mehr“ hinterlegen', { action: { label: 'Zu Mehr', fn: () => navigate('/settings') } }); return; }
         mode = 'ai'; drawPicker();
       } }),
     ]);
     const hint = h('p.small.muted.mt', {
       text: mode === 'pattern'
         ? 'Läuft komplett offline. Erkennt Zeilen wie „Bankdrücken 3 × 10 60 kg“ oder Tabellen mit Sätze/Wdh-Spalten. Danach kannst du alles prüfen und korrigieren.'
-        : `Das PDF wird an die Claude-API gesendet (${settings.aiModel}). Funktioniert auch bei gescannten oder ungewöhnlich formatierten Plänen. Kostet wenige Cent pro Import.`,
+        : `Das PDF wird an ${aiConfig().label} gesendet (${aiConfig().model}). Funktioniert auch bei gescannten oder ungewöhnlich formatierten Plänen. Kostet wenige Cent pro Import.`,
     });
 
     const input = h('input', { type: 'file', accept: 'application/pdf,.pdf' });
@@ -62,7 +63,7 @@ export function render(root, { navigate }) {
       if (mode === 'ai') {
         status.textContent = 'Claude liest das PDF … (10–40 s)';
         bar.firstChild.style.width = '35%';
-        const ai = await aiExtractPlans(file, { apiKey: settings.apiKey, model: settings.aiModel });
+        const ai = await aiExtractPlans(file);
         result = { plans: ai.plans, unmatched: [] };
         bar.firstChild.style.width = '100%';
       } else {
@@ -99,8 +100,8 @@ export function render(root, { navigate }) {
           ? 'Die Mustererkennung hat in diesem PDF keine Übungen gefunden. Das passiert bei gescannten PDFs (nur Bilder) oder sehr ungewöhnlichen Layouts.'
           : 'Claude konnte in diesem Dokument keinen Trainingsplan finden.' }),
         h('div.stack.mt', {}, [
-          mode === 'pattern' && settings.apiKey ? h('button.btn.primary.block', { text: 'Mit KI erneut versuchen', onclick: () => { mode = 'ai'; drawPicker(); } }) : null,
-          mode === 'pattern' && !settings.apiKey ? h('button.btn.ghost.block', { text: 'KI-Import einrichten', onclick: () => navigate('/settings') }) : null,
+          mode === 'pattern' && aiReady() ? h('button.btn.primary.block', { text: 'Mit KI erneut versuchen', onclick: () => { mode = 'ai'; drawPicker(); } }) : null,
+          mode === 'pattern' && !aiReady() ? h('button.btn.ghost.block', { text: 'KI-Import einrichten', onclick: () => navigate('/settings') }) : null,
           h('button.btn.ghost.block', { text: 'Andere Datei wählen', onclick: drawPicker }),
         ]),
         rawDetails(rawLines),

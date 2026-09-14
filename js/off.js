@@ -25,8 +25,15 @@ function normalize(p) {
   };
 }
 
-async function get(url) {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+async function get(url, retry = true) {
+  let res;
+  try { res = await fetch(url, { headers: { Accept: 'application/json' } }); }
+  catch (e) {
+    // Limit-Antworten (429) kommen ohne CORS-Header an → „Failed to fetch“; einmal kurz warten und nochmal
+    if (retry) { await new Promise(r => setTimeout(r, 1500)); return get(url, false); }
+    throw new Error('Open Food Facts gerade nicht erreichbar – Netz oder Anfrage-Limit, kurz warten.');
+  }
+  if (res.status === 429) throw new Error('Anfrage-Limit von Open Food Facts erreicht – eine Minute warten.');
   if (!res.ok) throw new Error(`Open Food Facts antwortet mit ${res.status}`);
   return res.json();
 }

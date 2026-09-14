@@ -1,6 +1,6 @@
 // KI-Freitext: „500 g Hähnchenbrust, 200 g Philadelphia, 1 Apfel“ → Zutaten mit Gramm und Nährwerten pro 100 g.
-// Nutzt denselben Claude-API-Key wie der PDF-Import; Antwort als JSON-Schema.
-const API_URL = 'https://api.anthropic.com/v1/messages';
+// Nutzt den KI-Zugang aus den Einstellungen (Claude oder OpenAI); Antwort als JSON-Schema.
+import { structured } from './llm.js';
 
 const SCHEMA = {
   type: 'object',
@@ -42,37 +42,14 @@ Regeln:
 
 /**
  * @param {string} text Freitext
- * @param {{apiKey:string, model:string}} opts
  * @returns {Promise<{items:Array, servings:number|null, title:string|null}>}
  */
-export async function aiParseFood(text, { apiKey, model = 'claude-sonnet-5' }) {
-  if (!apiKey) throw new Error('Kein API-Key hinterlegt. Trag ihn unter „Mehr → KI-Import“ ein.');
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-    body: JSON.stringify({
-      model, max_tokens: 4000, system: SYSTEM,
-      messages: [{ role: 'user', content: text.trim() }],
-      output_config: { format: { type: 'json_schema', schema: SCHEMA } },
-    }),
-  });
-  if (!res.ok) {
-    let msg = `API-Fehler ${res.status}`;
-    try { const err = await res.json(); if (err?.error?.message) msg += `: ${err.error.message}`; } catch { /* keine Details */ }
-    if (res.status === 401) msg = 'API-Key ungültig (401). Bitte unter „Mehr“ prüfen.';
-    if (res.status === 429) msg = 'Rate-Limit erreicht (429). Kurz warten und erneut versuchen.';
-    if (res.status === 529) msg = 'Claude ist gerade überlastet (529). Gleich nochmal probieren.';
-    throw new Error(msg);
-  }
-  const msg = await res.json();
-  if (msg.stop_reason === 'refusal') throw new Error('Claude hat die Anfrage abgelehnt.');
-  const out = (msg.content || []).find(b => b.type === 'text')?.text;
-  if (!out) throw new Error('Leere Antwort von der API.');
-  const parsed = JSON.parse(out);
-  const items = (parsed.items || []).map(i => ({
+export async function aiParseFood(text) {
+  const { data, usage } = await structured({ system: SYSTEM, text: text.trim(), schema: SCHEMA, schemaName: 'lebensmittel', maxTokens: 4000 });
+  const items = (data.items || []).map(i => ({
     name: String(i.name || '').trim(), brand: String(i.brand || '').trim(), unit: i.unit === 'ml' ? 'ml' : 'g',
     grams: Math.max(0, Math.round(Number(i.grams) || 0)), note: String(i.note || ''),
     per100: { kcal: Math.max(0, Math.round(Number(i.kcal100) || 0)), protein: Math.max(0, Math.round((Number(i.protein100) || 0) * 10) / 10), carbs: Math.max(0, Math.round((Number(i.carbs100) || 0) * 10) / 10), fat: Math.max(0, Math.round((Number(i.fat100) || 0) * 10) / 10) },
   })).filter(i => i.name && i.grams > 0);
-  return { items, servings: parsed.servings ? Math.max(1, parseInt(parsed.servings, 10)) : null, title: parsed.title ? String(parsed.title).trim() : null, usage: msg.usage };
+  return { items, servings: data.servings ? Math.max(1, parseInt(data.servings, 10)) : null, title: data.title ? String(data.title).trim() : null, usage };
 }
