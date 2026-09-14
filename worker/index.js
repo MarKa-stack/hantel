@@ -12,7 +12,7 @@
 //   DAILY_LIMIT           Variable, Anfragen pro Tag gesamt, Standard 200
 //   RATE_PER_10MIN        Variable, Anfragen pro IP und 10 Minuten, Standard 20
 //   MAX_CONCURRENT        Variable, parallele Anfragen je Worker-Instanz, Standard 3
-//   TIMEOUT_MS            Variable, Standard 60000
+//   TIMEOUT_MS            Variable, Standard 90000
 //   HANTEL_KV             KV-Namespace (optional, für Limits/Zähler über Instanzen hinweg)
 
 // ===== js/ai-tasks.js (eingebettet, nicht hier bearbeiten) =====
@@ -260,7 +260,7 @@ function validateSchema(schema, value, path = '$', out = []) {
 /** Aufgaben: Eingabe → { text, image?, pdf? }; Antwort → bereinigtes Ergebnis */
 const TASKS = {
   'food-text': {
-    schema: FOOD_TEXT_SCHEMA, schemaName: 'lebensmittel', system: FOOD_TEXT_SYSTEM, maxTokens: 4000,
+    schema: FOOD_TEXT_SCHEMA, schemaName: 'lebensmittel', system: FOOD_TEXT_SYSTEM, maxTokens: 5000, reasoning: 'minimal',
     input(p) { const text = str(p?.text, 2000); if (!text) throw new Error('Text fehlt'); return { text }; },
     clean(d) {
       const items = (d.items || []).map(i => ({
@@ -272,7 +272,7 @@ const TASKS = {
     },
   },
   'food-image': {
-    schema: FOOD_IMAGE_SCHEMA, schemaName: 'foto_gericht', system: FOOD_IMAGE_SYSTEM, maxTokens: 3000, vision: true,
+    schema: FOOD_IMAGE_SCHEMA, schemaName: 'foto_gericht', system: FOOD_IMAGE_SYSTEM, maxTokens: 5000, vision: true, reasoning: 'low',
     input(p) {
       const image = String(p?.image || '');
       if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) throw new Error('Ungültiges Bild');
@@ -291,7 +291,7 @@ const TASKS = {
     },
   },
   'recipe': {
-    schema: RECIPE_SCHEMA, schemaName: 'rezept', system: RECIPE_SYSTEM, maxTokens: 4000,
+    schema: RECIPE_SCHEMA, schemaName: 'rezept', system: RECIPE_SYSTEM, maxTokens: 8000, reasoning: 'low',
     input(p) {
       const ingredients = [].concat(p?.ingredients || []).map(s => str(s, 60)).filter(Boolean).slice(0, 30);
       if (!ingredients.length) throw new Error('Keine Zutaten angegeben');
@@ -326,7 +326,7 @@ const TASKS = {
     },
   },
   'web-recipes': {
-    schema: WEB_RECIPES_SCHEMA, schemaName: 'web_rezepte', system: WEB_RECIPES_SYSTEM, maxTokens: 2500, webSearch: true,
+    schema: WEB_RECIPES_SCHEMA, schemaName: 'web_rezepte', system: WEB_RECIPES_SYSTEM, maxTokens: 4000, webSearch: true, reasoning: 'low',
     input(p) {
       const ingredients = [].concat(p?.ingredients || []).map(s => str(s, 60)).filter(Boolean).slice(0, 20);
       if (!ingredients.length) throw new Error('Keine Zutaten angegeben');
@@ -347,7 +347,7 @@ const TASKS = {
     },
   },
   'pdf-plans': {
-    schema: PDF_PLANS_SCHEMA, schemaName: 'trainingsplaene', system: PDF_PLANS_SYSTEM, maxTokens: 16000, pdf: true,
+    schema: PDF_PLANS_SCHEMA, schemaName: 'trainingsplaene', system: PDF_PLANS_SYSTEM, maxTokens: 16000, pdf: true, reasoning: 'low',
     input(p) {
       const base64 = String(p?.pdf || '');
       if (!/^[A-Za-z0-9+/=]+$/.test(base64) || base64.length < 100) throw new Error('Ungültiges PDF');
@@ -456,11 +456,14 @@ async function chatStructured(task, inp, env, signal) {
   if (inp.image) content.push({ type: 'image_url', image_url: { url: inp.image, detail: 'auto' } });
   if (inp.pdf) content.push({ type: 'file', file: { filename: inp.pdf.name, file_data: 'data:application/pdf;base64,' + inp.pdf.base64 } });
   content.push({ type: 'text', text: inp.text });
-  const msg = await openai('chat/completions', {
+  const body = {
     model, max_completion_tokens: task.maxTokens,
     messages: [{ role: 'system', content: task.system }, { role: 'user', content }],
     response_format: { type: 'json_schema', json_schema: { name: task.schemaName, strict: true, schema: apiSchema(task.schema) } },
-  }, env, signal);
+  };
+  // Reasoning-Modelle (gpt-5, o-Serie): wenig „Nachdenken“, sonst dauert es lange und frisst das Token-Budget
+  if (/^(gpt-5|o[0-9])/i.test(model) && task.reasoning) body.reasoning_effort = task.reasoning;
+  const msg = await openai('chat/completions', body, env, signal);
   const choice = msg.choices && msg.choices[0];
   if (choice && choice.message && choice.message.refusal) throw Object.assign(new Error('Die KI hat die Anfrage abgelehnt: ' + choice.message.refusal), { status: 422 });
   const text = choice && choice.message && choice.message.content;
@@ -474,6 +477,7 @@ async function searchStructured(task, inp, env, signal) {
   const body = (toolType) => ({
     model, max_output_tokens: task.maxTokens,
     tools: [{ type: toolType }],
+    ...(/^(gpt-5|o[0-9])/i.test(model) && task.reasoning ? { reasoning: { effort: task.reasoning === 'minimal' ? 'low' : task.reasoning } } : {}),
     instructions: task.system,
     input: inp.text,
     text: { format: { type: 'json_schema', name: task.schemaName, strict: true, schema: apiSchema(task.schema) } },
@@ -496,6 +500,60 @@ async function searchStructured(task, inp, env, signal) {
   return { text, usage: msg.usage, cited, model };
 }
 
+// ---------- Open Food Facts (Proxy mit Cache: stabiler als direkt aus dem Browser) ----------
+
+const OFF_FIELDS = 'code,product_name,product_name_de,brands,nutriments,serving_quantity,serving_size,quantity';
+const OFF_UA = 'Hantel/1.9 (https://github.com/MarKa-stack/hantel)';
+
+async function offFetch(url, tries = 2) {
+  for (let i = 0; i < tries; i++) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 15000);
+    try {
+      const res = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': OFF_UA }, signal: ctl.signal });
+      clearTimeout(t);
+      if (res.ok) return res.json();
+      if (res.status === 429 || res.status >= 500) { await new Promise(r => setTimeout(r, 1200)); continue; }
+      throw Object.assign(new Error(`Open Food Facts antwortet mit ${res.status}`), { status: 502 });
+    } catch (e) {
+      clearTimeout(t);
+      if (i === tries - 1) throw Object.assign(new Error('Open Food Facts antwortet gerade nicht – gleich nochmal versuchen.'), { status: 503 });
+    }
+  }
+  throw Object.assign(new Error('Open Food Facts antwortet gerade nicht.'), { status: 503 });
+}
+
+/** GET /off/search?q=… und GET /off/product/<ean> – Antworten 6 h bzw. 24 h am Edge gecacht */
+async function handleOff(request, path, cors, env) {
+  const url = new URL(request.url);
+  let target, ttl;
+  if (path === 'search') {
+    const q = (url.searchParams.get('q') || '').trim().slice(0, 80);
+    if (q.length < 2) return json({ ok: false, error: 'Suchbegriff fehlt' }, 400, cors);
+    target = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=30&fields=${OFF_FIELDS}&lc=de&tagtype_0=countries&tag_contains_0=contains&tag_0=germany`;
+    ttl = 6 * 3600;
+  } else if (path.startsWith('product/')) {
+    const code = path.slice(8).replace(/\D/g, '');
+    if (!/^\d{8,14}$/.test(code)) return json({ ok: false, error: 'Ungültige EAN' }, 400, cors);
+    target = `https://world.openfoodfacts.org/api/v2/product/${code}?fields=${OFF_FIELDS}`;
+    ttl = 24 * 3600;
+  } else return json({ ok: false, error: 'Nicht gefunden' }, 404, cors);
+
+  const cache = globalThis.caches?.default || null; // Edge-Cache (in Tests nicht vorhanden)
+  const cacheKey = new Request(target, { method: 'GET' });
+  const hit = cache ? await cache.match(cacheKey) : null;
+  if (hit) return new Response(hit.body, { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'X-Cache': 'HIT', ...cors } });
+  try {
+    let data = await offFetch(target);
+    if (path === 'search' && !(data.products || []).length) data = await offFetch(target.replace('&tagtype_0=countries&tag_contains_0=contains&tag_0=germany', ''));
+    const body = JSON.stringify(data);
+    if (cache) await cache.put(cacheKey, new Response(body, { headers: { 'content-type': 'application/json', 'Cache-Control': `public, max-age=${ttl}` } }));
+    return new Response(body, { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'X-Cache': 'MISS', ...cors } });
+  } catch (e) {
+    return json({ ok: false, error: e.message }, e.status || 502, cors);
+  }
+}
+
 // ---------- Request-Handling ----------
 
 async function handleTask(name, payload, env) {
@@ -505,7 +563,7 @@ async function handleTask(name, payload, env) {
   try { inp = task.input(payload); } catch (e) { throw Object.assign(new Error(e.message), { status: 400 }); }
 
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), parseInt(env.TIMEOUT_MS || '60000', 10));
+  const timer = setTimeout(() => ctl.abort(), parseInt(env.TIMEOUT_MS || '90000', 10));
   let raw;
   try {
     raw = task.webSearch ? await searchStructured(task, inp, env, ctl.signal) : await chatStructured(task, inp, env, ctl.signal);
@@ -527,13 +585,24 @@ export default {
     const cors = corsHeaders(request, env);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
+    const off = url.pathname.match(/^\/off\/(search|product\/\d+)$/);
     const m = url.pathname.match(/^\/ai\/([a-z-]+)$/);
-    if (!m) return json({ ok: false, error: 'Nicht gefunden' }, 404, cors);
+    if (!m && !off) return json({ ok: false, error: 'Nicht gefunden' }, 404, cors);
 
-    if (!env.OPENAI_API_KEY) return json({ ok: false, error: 'Server nicht konfiguriert: OPENAI_API_KEY fehlt.' }, 500, cors);
     if (!env.APP_TOKEN) return json({ ok: false, error: 'Server nicht konfiguriert: APP_TOKEN fehlt.' }, 500, cors);
     const token = request.headers.get('X-App-Token') || '';
     if (token !== env.APP_TOKEN) return json({ ok: false, error: 'Zugangstoken fehlt oder ist falsch.' }, 401, cors);
+
+    // Open Food Facts: eigenes, großzügiges Limit; zählt nicht als KI-Anfrage
+    if (off) {
+      if (request.method !== 'GET') return json({ ok: false, error: 'Methode' }, 405, cors);
+      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+      const n = await bump(env, `off:${ip}:${Math.floor(Date.now() / 600000)}`, 700);
+      if (n > 120) return json({ ok: false, error: 'Zu viele Suchanfragen – kurz warten.' }, 429, cors);
+      return handleOff(request, off[1], cors, env);
+    }
+
+    if (!env.OPENAI_API_KEY) return json({ ok: false, error: 'Server nicht konfiguriert: OPENAI_API_KEY fehlt.' }, 500, cors);
 
     const today = dayKey(), month = monthKey();
     if (m[1] === 'usage') {

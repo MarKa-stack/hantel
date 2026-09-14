@@ -43,3 +43,14 @@ npx wrangler deploy
 `POST /ai/food-text` · `POST /ai/food-image` · `POST /ai/recipe` · `POST /ai/web-recipes` · `POST /ai/pdf-plans` · `GET /ai/usage`
 
 Antwort: `{ ok: true, data, model, tokens, usage }` oder `{ ok: false, error }` mit HTTP-Status.
+
+Reasoning-Modelle (`gpt-5*`, `o*`) bekommen pro Aufgabe `reasoning_effort` (minimal/low), sonst dauern
+Rezepte minutenlang und laufen ins Timeout. `TIMEOUT_MS` ist standardmäßig 90000.
+
+### Open Food Facts (seit 1.9.1)
+
+`GET /off/search?q=…` und `GET /off/product/<EAN>` reichen die Anfrage an Open Food Facts weiter (mit
+User-Agent, Wiederholung bei 429/5xx) und cachen die Antwort 6 h bzw. 24 h am Edge. Braucht keinen
+OpenAI-Key, nur das Zugangstoken; eigenes Limit 120 Aufrufe / 10 Min pro IP. Direkt aus dem Browser
+liefert Open Food Facts unter Last Antworten ohne CORS-Header („kein Internet“) – der Umweg hier ist stabiler.
+Ohne eingerichteten Server ruft die App Open Food Facts weiter direkt auf (mit Timeout und Wiederholung).

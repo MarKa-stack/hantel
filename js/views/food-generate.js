@@ -85,7 +85,7 @@ export function render(root, { navigate }) {
     kcalMin: parseNum(d.kcalMin), kcalMax: parseNum(d.kcalMax), proteinMin: parseNum(d.proteinMin), servings: d.servings, timeMax: d.timeMax || null, diet: d.diet,
   });
 
-  const busy = (label) => { out.innerHTML = ''; out.append(h('div.card', {}, [h('div.row', { style: { gap: '10px' } }, [h('div.spinner'), h('span.small.muted', { text: label })])])); genBtn.disabled = webBtn.disabled = true; };
+  const busy = (label) => { out.innerHTML = ''; out.append(h('div.card', {}, [h('div.row', { style: { gap: '10px' } }, [h('div.spinner'), h('div', {}, [h('div.small', { text: label }), h('div.small.faint', { text: 'Kann bis zu einer Minute dauern' })])])])); genBtn.disabled = webBtn.disabled = true; };
   const idle = () => { genBtn.disabled = false; webBtn.disabled = !webOk; };
   const fail = (msg, retry) => { out.innerHTML = ''; out.append(h('div.card.alert-card', {}, [h('div.title-ico', { html: svgIcon.warning + '<b>Das hat nicht geklappt</b>' }), h('p.small.muted', { style: { marginTop: '6px' }, text: msg }), h('button.btn.sm.ghost.mt', { text: 'Erneut versuchen', onclick: retry })])); };
 

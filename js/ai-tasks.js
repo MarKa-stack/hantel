@@ -242,7 +242,7 @@ function validateSchema(schema, value, path = '$', out = []) {
 /** Aufgaben: Eingabe → { text, image?, pdf? }; Antwort → bereinigtes Ergebnis */
 const TASKS = {
   'food-text': {
-    schema: FOOD_TEXT_SCHEMA, schemaName: 'lebensmittel', system: FOOD_TEXT_SYSTEM, maxTokens: 4000,
+    schema: FOOD_TEXT_SCHEMA, schemaName: 'lebensmittel', system: FOOD_TEXT_SYSTEM, maxTokens: 5000, reasoning: 'minimal',
     input(p) { const text = str(p?.text, 2000); if (!text) throw new Error('Text fehlt'); return { text }; },
     clean(d) {
       const items = (d.items || []).map(i => ({
@@ -254,7 +254,7 @@ const TASKS = {
     },
   },
   'food-image': {
-    schema: FOOD_IMAGE_SCHEMA, schemaName: 'foto_gericht', system: FOOD_IMAGE_SYSTEM, maxTokens: 3000, vision: true,
+    schema: FOOD_IMAGE_SCHEMA, schemaName: 'foto_gericht', system: FOOD_IMAGE_SYSTEM, maxTokens: 5000, vision: true, reasoning: 'low',
     input(p) {
       const image = String(p?.image || '');
       if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) throw new Error('Ungültiges Bild');
@@ -273,7 +273,7 @@ const TASKS = {
     },
   },
   'recipe': {
-    schema: RECIPE_SCHEMA, schemaName: 'rezept', system: RECIPE_SYSTEM, maxTokens: 4000,
+    schema: RECIPE_SCHEMA, schemaName: 'rezept', system: RECIPE_SYSTEM, maxTokens: 8000, reasoning: 'low',
     input(p) {
       const ingredients = [].concat(p?.ingredients || []).map(s => str(s, 60)).filter(Boolean).slice(0, 30);
       if (!ingredients.length) throw new Error('Keine Zutaten angegeben');
@@ -308,7 +308,7 @@ const TASKS = {
     },
   },
   'web-recipes': {
-    schema: WEB_RECIPES_SCHEMA, schemaName: 'web_rezepte', system: WEB_RECIPES_SYSTEM, maxTokens: 2500, webSearch: true,
+    schema: WEB_RECIPES_SCHEMA, schemaName: 'web_rezepte', system: WEB_RECIPES_SYSTEM, maxTokens: 4000, webSearch: true, reasoning: 'low',
     input(p) {
       const ingredients = [].concat(p?.ingredients || []).map(s => str(s, 60)).filter(Boolean).slice(0, 20);
       if (!ingredients.length) throw new Error('Keine Zutaten angegeben');
@@ -329,7 +329,7 @@ const TASKS = {
     },
   },
   'pdf-plans': {
-    schema: PDF_PLANS_SCHEMA, schemaName: 'trainingsplaene', system: PDF_PLANS_SYSTEM, maxTokens: 16000, pdf: true,
+    schema: PDF_PLANS_SCHEMA, schemaName: 'trainingsplaene', system: PDF_PLANS_SYSTEM, maxTokens: 16000, pdf: true, reasoning: 'low',
     input(p) {
       const base64 = String(p?.pdf || '');
       if (!/^[A-Za-z0-9+/=]+$/.test(base64) || base64.length < 100) throw new Error('Ungültiges PDF');

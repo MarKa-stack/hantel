@@ -157,19 +157,29 @@ function macroCard(tot, t, navigate) {
  * @param {string|null} meal Ziel-Mahlzeit (null = Auswahl liefert nur zurück, z.B. Rezept-Zutat)
  * @param {string} dayKey
  * @param {Function} onDone nach dem Eintragen
- * @param {{ onFood?:(food, grams)=>void }} opts Rezept-Modus: statt Tagebuch-Eintrag Callback
+ * @param {{ onFood?:(food, grams)=>void, saveOnly?:boolean, scanFirst?:boolean }} opts
+ *   onFood: Rezept-Modus – statt Tagebuch-Eintrag Callback · saveOnly: nur in „Meine Lebensmittel“ übernehmen (ohne Portion)
+ *   scanFirst: Scanner direkt öffnen
  */
 export function openAddSheet(meal, dayKey, onDone, opts = {}) {
+  const pickerOnly = !!(opts.onFood || opts.saveOnly);
   openSheet((sheet, close) => {
     const input = h('input.input', { type: 'search', placeholder: 'Suchen … oder EAN eingeben', autocomplete: 'off' });
     const results = h('div.results');
     let online = [];
     let onlineState = ''; // '', 'loading', 'done', 'error'
     let onlineError = '';
-    let timer = null;
+    let timer = null, onlineTimer = null;
 
     const pickFood = (food, presetGrams) => {
-      openPortionSheet(food, { grams: presetGrams, meal: meal || 'lunch', onCommit: (grams, mealSel) => {
+      if (opts.saveOnly) {
+        // Nur merken: Basis-Lebensmittel bekommen eine eigene Kopie, alles andere behält seine ID
+        const known = getFoods().find(f => f.id === food.id || (food.barcode && f.barcode === food.barcode) || (f.name === food.name && (f.brand || '') === (food.brand || '')));
+        if (known) { close(); toast(`${known.name} ist schon in deinen Lebensmitteln`); openFoodEditor(known, () => onDone?.()); return; }
+        const saved = saveFood({ ...food, id: food.source === 'base' ? undefined : food.id, source: food.source === 'base' ? 'custom' : food.source, per100: { ...food.per100 }, portions: [...(food.portions || [])] });
+        close(); toast(`${saved.name} gemerkt`); onDone?.(); return;
+      }
+      openPortionSheet(food, { grams: presetGrams, meal: opts.onFood ? null : (meal || 'lunch'), onCommit: (grams, mealSel) => {
         // Online-Treffer lokal merken (schnell + offline beim nächsten Mal)
         if (food.source === 'off' && !getFoods().some(f => f.id === food.id)) saveFood({ ...food });
         if (opts.onFood) { close(); opts.onFood(food, grams); return; }
@@ -199,24 +209,25 @@ export function openAddSheet(meal, dayKey, onDone, opts = {}) {
       const q = input.value.trim();
       if (!q) {
         // KI-Wege: Foto und Rezept aus Zutaten (nur beim Eintragen ins Tagebuch, nicht als Rezept-Zutat)
-        if (!opts.onFood) {
+        if (!pickerOnly) {
           results.append(h('div.grid-2.mt', {}, [
             h('button.btn.ai-btn', { html: svgIcon.camera + '<span>Essen fotografieren</span>', onclick: () => { close(); openPhotoSheet({ meal, dayKey, onDone }); } }),
             h('button.btn.ai-btn', { html: svgIcon.sparkle + '<span>Rezept aus Zutaten</span>', onclick: () => { close(); location.hash = '#/food/generate'; } }),
           ]));
         }
+        if (opts.saveOnly) { results.append(h('p.small.muted', { style: { padding: '8px 0' }, text: 'Name oder EAN eintippen bzw. Barcode scannen – der Treffer landet in deinen Lebensmitteln.' })); return; }
         const rec = recentItems(10);
         if (rec.length) { results.append(h('div.subhead', {}, [h('h2', { text: 'Zuletzt' })])); results.append(h('div.card', {}, rec.map(r => r.kind === 'recipe' ? row('recipe', r.item) : row('food', r.item, r.lastGrams ? ` · zuletzt ${r.lastGrams} g` : '')))); }
         const fav = favoriteItems();
         if (fav.length) { results.append(h('div.subhead', {}, [h('h2', { text: 'Favoriten' })])); results.append(h('div.card', {}, fav.map(r => row('food', r.item)))); }
-        if (!opts.onFood && getRecipes().length) { results.append(h('div.subhead', {}, [h('h2', { text: 'Rezepte' })])); results.append(h('div.card', {}, getRecipes().slice(0, 6).map(r => row('recipe', r)))); }
+        if (!pickerOnly && getRecipes().length) { results.append(h('div.subhead', {}, [h('h2', { text: 'Rezepte' })])); results.append(h('div.card', {}, getRecipes().slice(0, 6).map(r => row('recipe', r)))); }
         if (!rec.length && !fav.length) results.append(h('p.small.muted', { style: { padding: '8px 0' }, text: 'Tipp etwas ein – Grundnahrungsmittel sind sofort da, Markenprodukte kommen von Open Food Facts.' }));
         return;
       }
       if (looksLikeBarcode(q)) {
         results.append(h('button.btn.block.mt', { text: `EAN ${q} nachschlagen`, onclick: () => lookupBarcode(q) }));
       }
-      const local = searchLocal(q).filter(x => opts.onFood ? x.kind === 'food' : true);
+      const local = searchLocal(q).filter(x => pickerOnly ? x.kind === 'food' : true);
       if (local.length) results.append(h('div.card', {}, local.map(x => row(x.kind, x.item))));
       else results.append(h('p.small.muted', { style: { padding: '8px 0' }, text: 'Nichts Lokales gefunden.' }));
       // Online
@@ -225,15 +236,18 @@ export function openAddSheet(meal, dayKey, onDone, opts = {}) {
       else if (onlineState === 'done') {
         box.append(h('div.subhead', {}, [h('h2', { text: 'Open Food Facts' })]));
         box.append(online.length ? h('div.card', {}, online.map(f => row('food', f))) : h('p.small.muted', { text: 'Keine Produkte mit vollständigen Nährwerten gefunden.' }));
-      } else if (onlineState === 'error') box.append(h('p.small.muted', { text: onlineError || 'Online-Suche fehlgeschlagen – Netz?' }));
-      else box.append(h('button.btn.ghost.block', { text: 'Online suchen (Open Food Facts)', onclick: () => searchOnline(q) }));
+      } else if (onlineState === 'error') {
+        box.append(h('p.small.muted', { text: onlineError || 'Online-Suche fehlgeschlagen.' }));
+        box.append(h('button.btn.ghost.block', { text: 'Nochmal online suchen', onclick: () => searchOnline(q) }));
+      } else box.append(h('button.btn.ghost.block', { text: 'Online suchen (Open Food Facts)', onclick: () => searchOnline(q) }));
       results.append(box);
     };
 
     const searchOnline = async (q) => {
+      clearTimeout(onlineTimer);
       onlineState = 'loading'; draw();
       try { online = await offSearch(q); onlineState = 'done'; } catch (e) { onlineState = 'error'; onlineError = e.message; }
-      draw();
+      if (input.value.trim() === q) draw(); // Eingabe hat sich inzwischen geändert → Ergebnis verwerfen
     };
     const lookupBarcode = async (code) => {
       onlineState = 'loading'; draw();
@@ -241,22 +255,30 @@ export function openAddSheet(meal, dayKey, onDone, opts = {}) {
       draw();
     };
 
-    input.addEventListener('input', () => { onlineState = ''; online = []; clearTimeout(timer); timer = setTimeout(draw, 120); });
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const q = input.value.trim(); if (looksLikeBarcode(q)) lookupBarcode(q); else if (q.length >= 2 && onlineState === '') searchOnline(q); } });
+    input.addEventListener('input', () => {
+      onlineState = ''; online = []; clearTimeout(timer); clearTimeout(onlineTimer);
+      timer = setTimeout(draw, 120);
+      // Online-Suche startet nach kurzer Tipp-Pause von selbst (Server cached, direkte Aufrufe sind begrenzt)
+      const q = input.value.trim();
+      if (q.length >= 3 && !looksLikeBarcode(q)) onlineTimer = setTimeout(() => { if (input.value.trim() === q && onlineState === '') searchOnline(q); }, 900);
+    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const q = input.value.trim(); if (looksLikeBarcode(q)) lookupBarcode(q); else if (q.length >= 2 && onlineState !== 'loading') searchOnline(q); } });
 
-    const scanBtn = h('button.btn.icon.ghost', { 'aria-label': 'Barcode scannen', title: 'Scannen', html: svgIcon.scan, hidden: !scannerAvailable(), onclick: () => openScanner((code) => { input.value = code; lookupBarcode(code); }) });
+    const scan = () => openScanner((code) => { input.value = code; lookupBarcode(code); });
+    const scanBtn = h('button.btn.icon.ghost', { 'aria-label': 'Barcode scannen', title: 'Scannen', html: svgIcon.scan, hidden: !scannerAvailable(), onclick: scan });
     sheet.append(
-      h('h2', { text: opts.onFood ? 'Zutat hinzufügen' : `${MEAL_NAME[meal] || 'Mahlzeit'} hinzufügen` }),
+      h('h2', { text: opts.saveOnly ? 'Lebensmittel suchen' : opts.onFood ? 'Zutat hinzufügen' : `${MEAL_NAME[meal] || 'Mahlzeit'} hinzufügen` }),
       h('div.row', { style: { gap: '8px' } }, [input, scanBtn]),
       results,
       h('div.row.mt', { style: { gap: '8px' } }, [
-        h('button.btn.ghost.grow', { text: 'Neues Lebensmittel', onclick: () => openFoodEditor(null, (f) => { if (f) pickFood(f); }) }),
-        opts.onFood ? null : h('button.btn.ghost.grow', { text: 'Freitext mit KI', onclick: () => { close(); openAiSheet({ meal: meal || 'lunch', dayKey, onDone }); } }),
+        h('button.btn.ghost.grow', { text: 'Neues Lebensmittel', onclick: () => openFoodEditor(null, (f) => { if (!f) return; if (opts.saveOnly) { close(); onDone?.(); } else pickFood(f); }) }),
+        pickerOnly ? null : h('button.btn.ghost.grow', { text: 'Freitext mit KI', onclick: () => { close(); openAiSheet({ meal: meal || 'lunch', dayKey, onDone }); } }),
       ]),
       h('div.actions', {}, [h('button.btn.block', { text: 'Abbrechen', onclick: close })]),
     );
     draw();
-    setTimeout(() => input.focus(), 80);
+    if (opts.scanFirst && scannerAvailable()) setTimeout(scan, 150);
+    else setTimeout(() => input.focus(), 80);
   });
 }
 
@@ -533,7 +555,11 @@ function renderRecipeEditor(root, { params, navigate }) {
   const list = h('div.card');
   const totals = h('div.card.mt');
   root.append(list);
-  root.append(h('button.btn.block.mt', { html: svgIcon.plus + '<span>Zutat hinzufügen</span>', onclick: () => openAddSheet(null, curKey, null, { onFood: (f, g) => { d.items.push({ foodId: f.id, name: f.name + (f.brand ? ` (${f.brand})` : ''), grams: g, per100: { ...f.per100 } }); drawList(); } }) }));
+  const onFood = (f, g) => { d.items.push({ foodId: f.id, name: f.name + (f.brand ? ` (${f.brand})` : ''), grams: g, per100: { ...f.per100 } }); drawList(); };
+  root.append(h('div.row.mt', { style: { gap: '8px' } }, [
+    h('button.btn.block.grow', { html: svgIcon.plus + '<span>Zutat hinzufügen</span>', onclick: () => openAddSheet(null, curKey, null, { onFood }) }),
+    scannerAvailable() ? h('button.btn.icon', { 'aria-label': 'Barcode scannen', title: 'Scannen', html: svgIcon.scan, onclick: () => openAddSheet(null, curKey, null, { onFood, scanFirst: true }) }) : null,
+  ]));
   root.append(totals);
   // Zubereitung (bei KI-Rezepten vorhanden)
   if (d.instructions?.length) root.append(h('div.card.mt', {}, [h('div.small.faint', { text: (d.prepTimeMinutes ? `${d.prepTimeMinutes} Min · ` : '') + 'Zubereitung' + (d.source === 'ai' ? ' · KI-Rezept, Nährwerte geschätzt' : '') }), h('ol.steps', { style: { marginTop: '6px' } }, d.instructions.map(s => h('li', { text: s })))]));
@@ -597,6 +623,11 @@ function renderMyFoods(root, { navigate }) {
       h('button.btn.sm.ghost.icon', { 'aria-label': 'Neu', html: svgIcon.plus, onclick: () => openFoodEditor(null, draw) }),
     ]));
     const box = h('div.foods-list');
+    // Suchen (Basis + Open Food Facts) und Scannen – Treffer werden hier gemerkt, ohne sie einzutragen
+    box.append(h('div.row', { style: { gap: '8px', marginBottom: '12px' } }, [
+      h('button.btn.ghost.grow', { html: svgIcon.search + '<span>Suchen</span>', onclick: () => openAddSheet(null, curKey, draw, { saveOnly: true }) }),
+      scannerAvailable() ? h('button.btn.ghost.grow', { html: svgIcon.scan + '<span>Scannen</span>', onclick: () => openAddSheet(null, curKey, draw, { saveOnly: true, scanFirst: true }) }) : null,
+    ]));
     if (!foods.length) box.append(h('div.card', {}, [h('p.small.muted', { text: 'Hier landen eigene Einträge, Open-Food-Facts-Produkte und KI-Schätzungen, die du benutzt hast. Basis-Lebensmittel (Hähnchenbrust, Reis …) sind immer da und tauchen beim Suchen auf.' })]));
     else {
       const card = h('div.card');

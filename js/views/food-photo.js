@@ -7,7 +7,7 @@ import { runTask, aiReady, aiSupports } from '../llm.js';
 import { openAddSheet } from './food.js';
 
 const MAX_SIDE = 1024;
-const STATUS = ['Lebensmittel erkennen …', 'Portionen schätzen …', 'Nährwerte berechnen …'];
+const STATUS = ['Lebensmittel erkennen …', 'Portionen schätzen …', 'Nährwerte berechnen …', 'Kann bis zu einer Minute dauern …'];
 const CONF = { high: ['Hohe Sicherheit', 'good'], medium: ['Mittlere Sicherheit', ''], low: ['⚠ Portionsgröße schwer erkennbar', 'warn'] };
 const r1 = (v) => Math.round(v * 10) / 10;
 

@@ -109,7 +109,7 @@ export async function runTask(name, payload) {
   const inp = task.input(payload);
   if (task.webSearch && config.provider !== 'openai') throw new Error('Rezepte im Web brauchen den Hantel-Server oder einen OpenAI-Key.');
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 60000);
+  const timer = setTimeout(() => ctl.abort(), 90000);
   let text, cited = null;
   try {
     if (task.webSearch) ({ text, cited } = await openaiSearch(task, inp, config, ctl.signal));
@@ -125,7 +125,7 @@ export async function runTask(name, payload) {
 
 async function proxyTask(name, payload, config) {
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 75000);
+  const timer = setTimeout(() => ctl.abort(), 100000);
   try {
     const res = await safeFetch(`${config.url}/ai/${name}`, {
       method: 'POST', signal: ctl.signal,
@@ -145,6 +145,8 @@ async function proxyTask(name, payload, config) {
 
 // ---------- eigener Key: OpenAI ----------
 
+const reasoningModel = (m) => /^(gpt-5|o[0-9])/i.test(m || '');
+
 async function openaiChat(task, inp, config, signal) {
   const content = [];
   if (inp.image) content.push({ type: 'image_url', image_url: { url: inp.image, detail: 'auto' } });
@@ -157,6 +159,8 @@ async function openaiChat(task, inp, config, signal) {
       model: config.model, max_completion_tokens: task.maxTokens,
       messages: [{ role: 'system', content: task.system }, { role: 'user', content }],
       response_format: { type: 'json_schema', json_schema: { name: task.schemaName, strict: true, schema: apiSchema(task.schema) } },
+      // Reasoning-Modelle (gpt-5, o-Serie) denken sonst minutenlang – wenig Reasoning reicht für diese Aufgaben
+      ...(reasoningModel(config.model) && task.reasoning ? { reasoning_effort: task.reasoning } : {}),
     }),
   }, 'openai');
   if (!res.ok) { let d = ''; try { d = (await res.json())?.error?.message || ''; } catch { /* egal */ } throw new Error(friendlyError(res.status, d, 'openai')); }
@@ -172,6 +176,7 @@ async function openaiSearch(task, inp, config, signal) {
   const body = (toolType) => JSON.stringify({
     model: config.model, max_output_tokens: task.maxTokens, tools: [{ type: toolType }], instructions: task.system, input: inp.text,
     text: { format: { type: 'json_schema', name: task.schemaName, strict: true, schema: apiSchema(task.schema) } },
+    ...(reasoningModel(config.model) && task.reasoning ? { reasoning: { effort: task.reasoning === 'minimal' ? 'low' : task.reasoning } } : {}),
   });
   const call = (toolType) => safeFetch('https://api.openai.com/v1/responses', { method: 'POST', signal, headers: { 'content-type': 'application/json', Authorization: `Bearer ${config.key}` }, body: body(toolType) }, 'openai');
   let res = await call('web_search');
