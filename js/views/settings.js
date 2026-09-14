@@ -1,12 +1,12 @@
 // Mehr: Einstellungen, KI-Import, Datensicherung, Installation
 import { h, svgIcon, toast, confirmSheet, fmtDate, isIOS, weekKey } from '../util.js';
 import { getSettings, updateSettings, importJSON, resetAll, getSessions, getPlans, deloadActive } from '../store.js';
-import { PROVIDERS, testConnection } from '../llm.js';
+import { PROVIDERS, testConnection, listModels } from '../llm.js';
 import { exportBackup } from '../backup.js';
 import { cloudPush, cloudPull } from '../cloud.js';
 import { exportCSV, exportICS, WEEKDAYS_DE } from '../exporters.js';
 
-export const APP_VERSION = '1.8.0';
+export const APP_VERSION = '1.8.1';
 
 export function render(root, { navigate }) {
   const s = getSettings();
@@ -113,7 +113,7 @@ export function render(root, { navigate }) {
     const customIn = h('input.input', { type: 'text', value: known ? '' : cur, placeholder: 'Modell-ID, z.B. gpt-5-nano', hidden: known, autocapitalize: 'off', spellcheck: false, style: { marginTop: '8px' } });
     model.addEventListener('change', () => { if (model.value === '__custom') { customIn.hidden = false; customIn.focus(); } else { customIn.hidden = true; updateSettings({ [modelField]: model.value }); } });
     customIn.addEventListener('change', () => { const v = customIn.value.trim(); if (v) updateSettings({ [modelField]: v }); });
-    const testBtn = h('button.btn.ghost.block', { text: 'Verbindung testen', onclick: async () => {
+    const testBtn = h('button.btn.ghost', { text: 'Verbindung testen', onclick: async () => {
       const k = key.value.trim();
       if (!k) { toast('Bitte erst einen API-Key eintragen'); return; }
       updateSettings({ [keyField]: k });
@@ -122,12 +122,31 @@ export function render(root, { navigate }) {
       catch (e) { toast('Fehler: ' + e.message, { duration: 6000 }); }
       finally { testBtn.disabled = false; testBtn.textContent = 'Verbindung testen'; }
     } });
+    // Welche Modelle der Key wirklich hat – die Liste ersetzt dann die Vorauswahl
+    const listBtn = h('button.btn.ghost', { text: 'Modelle laden', onclick: async () => {
+      const k = key.value.trim();
+      if (!k) { toast('Bitte erst einen API-Key eintragen'); return; }
+      updateSettings({ [keyField]: k });
+      listBtn.disabled = true; listBtn.textContent = 'Lade …';
+      try {
+        const list = await listModels();
+        if (!list.length) { toast('Keine Chat-Modelle gefunden'); return; }
+        const sel = getSettings()[modelField] || p.defaultModel;
+        model.innerHTML = '';
+        for (const m of list) model.append(h('option', { value: m.id, text: m.label, selected: m.id === sel }));
+        model.append(h('option', { value: '__custom', text: 'Anderes Modell …', selected: !list.some(m => m.id === sel) }));
+        customIn.hidden = list.some(m => m.id === sel);
+        toast(`${list.length} Modelle verfügbar`);
+      } catch (e) { toast('Fehler: ' + e.message, { duration: 6000 }); }
+      finally { listBtn.disabled = false; listBtn.textContent = 'Modelle laden'; }
+    } });
     aiBox.append(h('div.card', {}, [
       h('p.small.muted', { html: `Für PDF-Import und Essen-Freitext. Eigener Key von <a href="${p.keyUrl}" target="_blank" rel="noopener">${p.keyUrl.replace('https://', '')}</a> – bleibt nur auf diesem Gerät und wird nie exportiert. Kosten: wenige Cent pro Import, Bruchteile eines Cents pro Mahlzeit.` }),
       h('div.mt', {}, [provSeg]),
       h('div.field.mt', {}, [h('label', { text: `API-Key (${p.label})` }), key]),
       h('div.field.mt', {}, [h('label', { text: 'Modell' }), model, customIn]),
-      h('div.mt', {}, [testBtn]),
+      h('p.small.faint', { text: '„Modelle laden“ zeigt genau die Modell-IDs, die dein Key über die API nutzen darf – Namen aus der ChatGPT-App können davon abweichen.' }),
+      h('div.grid-2.mt', {}, [testBtn, listBtn]),
     ]));
   };
   drawAi();

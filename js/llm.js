@@ -114,6 +114,9 @@ async function openaiStructured({ system, text, pdf, schema, schemaName, maxToke
 export async function testConnection(config = aiConfig()) {
   if (!config.key) throw new Error('Kein API-Key');
   if (config.provider === 'openai') {
+    // Erst der Key über /v1/models (liefert bei 401 saubere CORS-Header), dann das Modell über einen Mini-Chat
+    const probe = await safeFetch('https://api.openai.com/v1/models?limit=1', { headers: { Authorization: `Bearer ${config.key}` } }, 'openai');
+    if (!probe.ok) throw new Error(friendlyError(probe.status, '', 'openai'));
     const res = await safeFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST', headers: { 'content-type': 'application/json', Authorization: `Bearer ${config.key}` },
       body: JSON.stringify({ model: config.model, max_completion_tokens: 16, messages: [{ role: 'user', content: 'Antworte nur mit OK.' }] }),
@@ -138,4 +141,22 @@ async function safeFetch(url, init, provider) {
     if (provider === 'openai') throw new Error('Keine Antwort von OpenAI – meist ist der API-Key ungültig (OpenAI beantwortet das ohne CORS-Header), sonst Netz prüfen.');
     throw new Error('Keine Antwort vom KI-Dienst – Netz prüfen.');
   }
+}
+
+/** Modelle, auf die der Key Zugriff hat (OpenAI: /v1/models, Claude: /v1/models) */
+export async function listModels(config = aiConfig()) {
+  if (!config.key) throw new Error('Kein API-Key');
+  if (config.provider === 'openai') {
+    const res = await safeFetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${config.key}` } }, 'openai');
+    if (!res.ok) throw new Error(friendlyError(res.status, '', 'openai'));
+    const data = (await res.json()).data || [];
+    // Chat-taugliche Modelle; Embeddings, Audio, Bilder, Realtime usw. ausblenden
+    return data.map(m => m.id)
+      .filter(id => /^(gpt|o\d|chatgpt)/i.test(id) && !/embedding|audio|realtime|tts|transcribe|image|search|moderation|instruct|vision-preview/i.test(id))
+      .sort((a, b) => b.localeCompare(a)).map(id => ({ id, label: id }));
+  }
+  const res = await safeFetch('https://api.anthropic.com/v1/models?limit=100', { headers: { 'x-api-key': config.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' } }, 'claude');
+  if (!res.ok) throw new Error(friendlyError(res.status, '', 'claude'));
+  const data = (await res.json()).data || [];
+  return data.map(m => ({ id: m.id, label: m.display_name ? `${m.display_name} (${m.id})` : m.id }));
 }
