@@ -1066,3 +1066,13 @@ body:has(.view.wk-view) .pr-toast { top: calc(var(--safe-top) + 88px); }
 .food-tile .mini-bars i.p { background: var(--good); }
 .stepper input.input { border: 0; background: transparent; text-align: center; padding: 0; }
 .tab { font-size: 10.5px; }
+
+/* Barcode-Scanner */
+.scanner { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 52vh; background: #000; border-radius: 14px; overflow: hidden; margin-top: 12px; }
+.scanner video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scanner .frame {
+  position: absolute; left: 12%; right: 12%; top: 30%; bottom: 30%;
+  border: 2px solid rgba(255, 255, 255, 0.85); border-radius: 12px;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.35);
+}
+.scanner .frame::after { content: ""; position: absolute; left: 6%; right: 6%; top: 50%; height: 2px; background: var(--accent); opacity: 0.9; box-shadow: 0 0 8px var(--accent); }

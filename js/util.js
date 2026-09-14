@@ -87,6 +87,7 @@ export const svgIcon = {
   speaker: '<svg class="ico" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>',
   medal: '<svg class="ico" viewBox="0 0 24 24"><path d="M12 2L9 8l-6 .5 4.5 4L6 19l6-3.5 6 3.5-1.5-6.5 4.5-4L15 8l-3-6zm0 4.6l1.7 3.4 3.7.3-2.8 2.5.9 3.7-3.5-2-3.5 2 .9-3.7-2.8-2.5 3.7-.3L12 6.6z"/></svg>',
   food: '<svg class="ico" viewBox="0 0 24 24"><path d="M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z"/></svg>',
+  scan: '<svg class="ico" viewBox="0 0 24 24"><path d="M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2zM7 7h2v10H7zm4 0h1v10h-1zm3 0h2v10h-2zm3 0h1v10h-1z"/></svg>',
 };
 
 /** Icon-Kachel (farbiger Kasten mit Icon) */

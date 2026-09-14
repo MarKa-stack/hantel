@@ -4,6 +4,7 @@ import { getSettings, updateSettings, getFoods, saveFood, deleteFood, touchFood,
 import { MEALS, MEAL_NAME, ACTIVITY, GOALS, dateKey, keyToTs, macros, sumMacros, recipeTotals, searchLocal, recentItems, favoriteItems, findFood, dayTotals, mealTotals, foodEntry, recipeEntry, targets, tdee, currentWeight, adaptiveSuggestion, applyAdjustment, intakeAverage, weightTrend, fmtKcal, fmtG } from '../nutrition.js';
 import { offSearch, offByBarcode, looksLikeBarcode } from '../off.js';
 import { aiParseFood } from '../ai-food.js';
+import { openScanner, scannerAvailable } from '../scanner.js';
 
 let curKey = dateKey();
 let unsub = null;
@@ -198,9 +199,10 @@ export function openAddSheet(meal, dayKey, onDone, opts = {}) {
     input.addEventListener('input', () => { onlineState = ''; online = []; clearTimeout(timer); timer = setTimeout(draw, 120); });
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const q = input.value.trim(); if (looksLikeBarcode(q)) lookupBarcode(q); else if (q.length >= 2 && onlineState === '') searchOnline(q); } });
 
+    const scanBtn = h('button.btn.icon.ghost', { 'aria-label': 'Barcode scannen', title: 'Scannen', html: svgIcon.scan, hidden: !scannerAvailable(), onclick: () => openScanner((code) => { input.value = code; lookupBarcode(code); }) });
     sheet.append(
       h('h2', { text: opts.onFood ? 'Zutat hinzufügen' : `${MEAL_NAME[meal] || 'Mahlzeit'} hinzufügen` }),
-      input,
+      h('div.row', { style: { gap: '8px' } }, [input, scanBtn]),
       results,
       h('div.row.mt', { style: { gap: '8px' } }, [
         h('button.btn.ghost.grow', { text: 'Neues Lebensmittel', onclick: () => openFoodEditor(null, (f) => { if (f) pickFood(f); }) }),
