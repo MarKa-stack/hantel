@@ -6,7 +6,7 @@ import { exportBackup } from '../backup.js';
 import { cloudPush, cloudPull } from '../cloud.js';
 import { exportCSV, exportICS, WEEKDAYS_DE } from '../exporters.js';
 
-export const APP_VERSION = '1.8.1';
+export const APP_VERSION = '1.9.0';
 
 export function render(root, { navigate }) {
   const s = getSettings();
@@ -96,12 +96,41 @@ export function render(root, { navigate }) {
   const aiBox = h('div');
   const drawAi = () => {
     const st = getSettings();
-    const provider = st.aiProvider === 'openai' ? 'openai' : 'claude';
+    const provider = ['proxy', 'openai', 'claude'].includes(st.aiProvider) ? st.aiProvider : 'claude';
     const p = PROVIDERS[provider];
-    const keyField = provider === 'openai' ? 'openaiKey' : 'apiKey';
-    const modelField = provider === 'openai' ? 'openaiModel' : 'aiModel';
     aiBox.innerHTML = '';
     const provSeg = h('div.seg', {}, Object.entries(PROVIDERS).map(([k, v]) => h('button', { text: v.label, class: provider === k ? 'active' : '', onclick: () => { updateSettings({ aiProvider: k }); drawAi(); } })));
+
+    // ----- Hantel-Server (Cloudflare Worker): Key liegt nur dort -----
+    if (provider === 'proxy') {
+      const urlIn = h('input.input', { type: 'url', value: st.proxyUrl || '', placeholder: 'https://hantel-ai.<name>.workers.dev', autocomplete: 'off', autocapitalize: 'off', spellcheck: false });
+      urlIn.addEventListener('change', () => updateSettings({ proxyUrl: urlIn.value.trim().replace(/\/+$/, '') }));
+      const tokIn = h('input.input', { type: 'password', value: st.proxyToken || '', placeholder: 'Zugangstoken (APP_TOKEN)', autocomplete: 'off', autocapitalize: 'off', spellcheck: false });
+      tokIn.addEventListener('change', () => updateSettings({ proxyToken: tokIn.value.trim() }));
+      const usage = h('p.small.faint.mt');
+      const drawUsage = () => { const u = getSettings().proxyUsage; usage.textContent = u ? `KI-Anfragen heute ${u.today}${u.dailyLimit ? ` / ${u.dailyLimit}` : ''} · diesen Monat ${u.month}` : 'Noch keine Verbindung.'; };
+      drawUsage();
+      const testBtn = h('button.btn.ghost.block', { text: 'Verbindung testen', onclick: async () => {
+        updateSettings({ proxyUrl: urlIn.value.trim().replace(/\/+$/, ''), proxyToken: tokIn.value.trim() });
+        testBtn.disabled = true; testBtn.textContent = 'Teste …';
+        try { await testConnection(); toast('Server erreichbar'); drawUsage(); }
+        catch (e) { toast('Fehler: ' + e.message, { duration: 6000 }); }
+        finally { testBtn.disabled = false; testBtn.textContent = 'Verbindung testen'; }
+      } });
+      aiBox.append(h('div.card', {}, [
+        h('p.small.muted', { text: p.hint + ' Für Foto-Analyse, Rezepte, Websuche, Freitext und PDF-Import.' }),
+        h('div.mt', {}, [provSeg]),
+        h('div.field.mt', {}, [h('label', { text: 'Server-URL' }), urlIn]),
+        h('div.field.mt', {}, [h('label', { text: 'Zugangstoken' }), tokIn]),
+        h('div.mt', {}, [testBtn]),
+        usage,
+        h('p.small.faint', { html: 'Einrichtung: <a href="https://github.com/MarKa-stack/hantel/tree/main/worker" target="_blank" rel="noopener">worker/README.md</a> – Worker im Cloudflare-Dashboard anlegen, <code class="kbd">OPENAI_API_KEY</code> und <code class="kbd">APP_TOKEN</code> als Secrets setzen.' }),
+      ]));
+      return;
+    }
+
+    const keyField = provider === 'openai' ? 'openaiKey' : 'apiKey';
+    const modelField = provider === 'openai' ? 'openaiModel' : 'aiModel';
     const key = h('input.input', { type: 'password', value: st[keyField] || '', placeholder: p.keyPlaceholder, autocomplete: 'off', autocapitalize: 'off', spellcheck: false });
     key.addEventListener('change', () => updateSettings({ [keyField]: key.value.trim() }));
     const cur = st[modelField] || p.defaultModel;
@@ -141,7 +170,7 @@ export function render(root, { navigate }) {
       finally { listBtn.disabled = false; listBtn.textContent = 'Modelle laden'; }
     } });
     aiBox.append(h('div.card', {}, [
-      h('p.small.muted', { html: `Für PDF-Import und Essen-Freitext. Eigener Key von <a href="${p.keyUrl}" target="_blank" rel="noopener">${p.keyUrl.replace('https://', '')}</a> – bleibt nur auf diesem Gerät und wird nie exportiert. Kosten: wenige Cent pro Import, Bruchteile eines Cents pro Mahlzeit.` }),
+      h('p.small.muted', { html: `Eigener Key im Gerät (Alternative zum Hantel-Server; Foto, Rezepte, Freitext, PDF – Websuche nur mit OpenAI). Key von <a href="${p.keyUrl}" target="_blank" rel="noopener">${p.keyUrl.replace('https://', '')}</a> – bleibt nur auf diesem Gerät und wird nie exportiert. Kosten: wenige Cent pro Import, Bruchteile eines Cents pro Mahlzeit.` }),
       h('div.mt', {}, [provSeg]),
       h('div.field.mt', {}, [h('label', { text: `API-Key (${p.label})` }), key]),
       h('div.field.mt', {}, [h('label', { text: 'Modell' }), model, customIn]),

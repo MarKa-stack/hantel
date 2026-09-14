@@ -1,11 +1,12 @@
 // Essen: Tagebuch mit Ringen und Mahlzeiten, Lebensmittel (Basis / eigene / Open Food Facts / KI), Rezepte, Ziele
-import { h, svg, svgIcon, toast, openSheet, confirmSheet, actionSheet, promptSheet, parseNum, fmtDate, relativeDay, iconBox } from '../util.js';
+import { h, svg, svgIcon, toast, openSheet, confirmSheet, actionSheet, promptSheet, parseNum, fmtDate, relativeDay, iconBox, escapeHtml } from '../util.js';
 import { getSettings, updateSettings, getFoods, saveFood, deleteFood, touchFood, getRecipes, getRecipe, saveRecipe, deleteRecipe, getDay, addDiaryEntry, updateDiaryEntry, deleteDiaryEntry, copyDiaryDay, subscribe } from '../store.js';
 import { MEALS, MEAL_NAME, ACTIVITY, GOALS, dateKey, keyToTs, macros, sumMacros, recipeTotals, searchLocal, recentItems, favoriteItems, findFood, dayTotals, mealTotals, foodEntry, recipeEntry, targets, tdee, currentWeight, adaptiveSuggestion, applyAdjustment, intakeAverage, weightTrend, fmtKcal, fmtG } from '../nutrition.js';
 import { offSearch, offByBarcode, looksLikeBarcode } from '../off.js';
 import { aiParseFood } from '../ai-food.js';
 import { openScanner, scannerAvailable } from '../scanner.js';
 import { aiReady } from '../llm.js';
+import { openPhotoSheet } from './food-photo.js';
 
 let curKey = dateKey();
 let unsub = null;
@@ -68,7 +69,7 @@ function renderDay(root, { navigate, query }) {
       for (const e of entries) {
         card.append(h('div.food-row', { onclick: () => openEntrySheet(curKey, e, draw) }, [
           h('div.grow', {}, [
-            h('div.truncate', { text: e.name, style: { fontWeight: 600 } }),
+            h('div.truncate', { html: escapeHtml(e.name) + (e.source === 'ai_image' ? ' <span class="pill accent sm">KI-Schätzung</span>' : ''), style: { fontWeight: 600 } }),
             h('div.small.faint', { text: (e.kind === 'recipe' ? `${String(e.servings).replace('.', ',')} Portion${e.servings === 1 ? '' : 'en'} · ` : `${e.grams} g · `) + `${fmtG(e.protein)} g P · ${fmtG(e.carbs)} g KH · ${fmtG(e.fat)} g F` }),
           ]),
           h('div.kcal', { text: fmtKcal(e.kcal) }),
@@ -197,6 +198,13 @@ export function openAddSheet(meal, dayKey, onDone, opts = {}) {
       results.innerHTML = '';
       const q = input.value.trim();
       if (!q) {
+        // KI-Wege: Foto und Rezept aus Zutaten (nur beim Eintragen ins Tagebuch, nicht als Rezept-Zutat)
+        if (!opts.onFood) {
+          results.append(h('div.grid-2.mt', {}, [
+            h('button.btn.ai-btn', { html: svgIcon.camera + '<span>Essen fotografieren</span>', onclick: () => { close(); openPhotoSheet({ meal, dayKey, onDone }); } }),
+            h('button.btn.ai-btn', { html: svgIcon.sparkle + '<span>Rezept aus Zutaten</span>', onclick: () => { close(); location.hash = '#/food/generate'; } }),
+          ]));
+        }
         const rec = recentItems(10);
         if (rec.length) { results.append(h('div.subhead', {}, [h('h2', { text: 'Zuletzt' })])); results.append(h('div.card', {}, rec.map(r => r.kind === 'recipe' ? row('recipe', r.item) : row('food', r.item, r.lastGrams ? ` · zuletzt ${r.lastGrams} g` : '')))); }
         const fav = favoriteItems();
@@ -291,11 +299,14 @@ function openPortionSheet(food, { grams, meal, onCommit, onDelete = null, title 
   });
 }
 
-function openServingsSheet(recipe, { servings, meal, onCommit, onDelete = null, title = 'Hinzufügen' }) {
+export function openServingsSheet(recipe, { servings, meal, onCommit, onDelete = null, title = 'Hinzufügen', dayPick = false }) {
   openSheet((sheet, close) => {
     let n = servings || 1;
     let mealSel = meal;
+    let daySel = dateKey();
     const t = recipeTotals(recipe);
+    // Tag wählen (Heute / Gestern) – z.B. für generierte Rezepte
+    const daySeg = dayPick ? h('div.seg.mt', {}, [[dateKey(), 'Heute'], [dateKey(Date.now() - 86400000), 'Gestern']].map(([k, l]) => h('button', { text: l, class: daySel === k ? 'active' : '', onclick: (e) => { daySel = k; for (const b of e.target.parentNode.children) b.classList.toggle('active', b === e.target); } }))) : null;
     const input = h('input.input.num', { type: 'text', inputmode: 'decimal', value: String(n).replace('.', ','), style: { fontSize: '26px', minHeight: '56px' } });
     const live = h('div.macro-live');
     const update = () => { live.innerHTML = `<b>${fmtKcal(t.perServing.kcal * n)} kcal</b> · ${fmtG(t.perServing.protein * n)} g P · ${fmtG(t.perServing.carbs * n)} g KH · ${fmtG(t.perServing.fat * n)} g F · ≈ ${Math.round(t.gramsPerServing * n)} g`; };
@@ -308,9 +319,10 @@ function openServingsSheet(recipe, { servings, meal, onCommit, onDelete = null, 
       h('div.stepper.mt', {}, [h('button', { text: '−', onclick: () => set(n - 0.5) }), h('div.val', {}, [input, h('small', { text: 'Portionen' })]), h('button', { text: '+', onclick: () => set(n + 0.5) })]),
       h('div.mt', {}, [live]),
       mealSeg ? h('div.mt', {}, [mealSeg]) : null,
+      daySeg,
       h('div.actions', {}, [
         onDelete ? h('button.btn.danger', { text: 'Löschen', onclick: () => { close(); onDelete(); } }) : h('button.btn.ghost', { text: 'Abbrechen', onclick: close }),
-        h('button.btn.primary', { text: title, onclick: () => { close(); onCommit(n, mealSel); } }),
+        h('button.btn.primary', { text: title, onclick: () => { close(); onCommit(n, mealSel, daySel); } }),
       ]),
     );
     update();
@@ -327,7 +339,13 @@ function openEntrySheet(dayKey, e, onDone) {
     return;
   }
   const f = findFood(e.refId) || { id: e.refId, name: e.name, per100: { kcal: e.kcal / e.grams * 100, protein: e.protein / e.grams * 100, carbs: e.carbs / e.grams * 100, fat: e.fat / e.grams * 100 }, unit: 'g', portions: [] };
-  openPortionSheet(f, { grams: e.grams, meal: e.meal, title: 'Speichern', onDelete: del, onCommit: (g, meal) => { updateDiaryEntry(dayKey, e.id, { ...foodEntry(f, g, meal), id: e.id, name: e.name }); onDone?.(); } });
+  // KI-Foto-Einträge (kind 'ai') behalten Kennzeichnung und Bestandteile; die Menge skaliert alle Werte
+  openPortionSheet(f, { grams: e.grams, meal: e.meal, title: 'Speichern', onDelete: del, onCommit: (g, meal) => {
+    const patch = { ...foodEntry(f, g, meal), id: e.id, name: e.name, kind: e.kind || 'food', refId: e.refId ?? null };
+    if (e.source) patch.source = e.source;
+    if (e.items) { const f2 = g / (e.grams || g); patch.items = e.items.map(i => ({ ...i, grams: Math.round(i.grams * f2), kcal: Math.round(i.kcal * f2), protein: Math.round(i.protein * f2 * 10) / 10, carbs: Math.round(i.carbs * f2 * 10) / 10, fat: Math.round(i.fat * f2 * 10) / 10 })); }
+    updateDiaryEntry(dayKey, e.id, patch); onDone?.();
+  } });
 }
 
 // ==================================================================
@@ -517,6 +535,8 @@ function renderRecipeEditor(root, { params, navigate }) {
   root.append(list);
   root.append(h('button.btn.block.mt', { html: svgIcon.plus + '<span>Zutat hinzufügen</span>', onclick: () => openAddSheet(null, curKey, null, { onFood: (f, g) => { d.items.push({ foodId: f.id, name: f.name + (f.brand ? ` (${f.brand})` : ''), grams: g, per100: { ...f.per100 } }); drawList(); } }) }));
   root.append(totals);
+  // Zubereitung (bei KI-Rezepten vorhanden)
+  if (d.instructions?.length) root.append(h('div.card.mt', {}, [h('div.small.faint', { text: (d.prepTimeMinutes ? `${d.prepTimeMinutes} Min · ` : '') + 'Zubereitung' + (d.source === 'ai' ? ' · KI-Rezept, Nährwerte geschätzt' : '') }), h('ol.steps', { style: { marginTop: '6px' } }, d.instructions.map(s => h('li', { text: s })))]));
 
   const drawList = () => {
     list.innerHTML = '';

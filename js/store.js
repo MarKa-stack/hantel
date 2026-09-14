@@ -16,6 +16,11 @@ const DEFAULT_SETTINGS = {
   aiProvider: 'claude', // 'claude' | 'openai'
   openaiKey: '',
   openaiModel: 'gpt-5-mini',
+  proxyUrl: '',         // Hantel-Server (Cloudflare Worker) – empfohlener KI-Zugang
+  proxyToken: '',       // Zugangstoken für den Worker (APP_TOKEN) – nie exportiert
+  proxyUsage: null,     // { today, month, dailyLimit } vom Worker
+  proxyUsageAt: 0,
+  photoConsent: false,  // Datenschutzhinweis zur Fotoanalyse bestätigt
   theme: 'dark',        // 'dark' | 'light' | 'system'
   weeklyGoal: 4,        // Trainings pro Woche (Wochenring auf dem Startbildschirm)
   barWeight: 20,        // Standard-Stangengewicht für den Scheibenrechner
@@ -52,7 +57,7 @@ const DEFAULT_SETTINGS = {
 
 /** Einstellungen ohne Geheimnisse (für Export/Cloud) */
 function publicSettings() {
-  const { apiKey, openaiKey, gistToken, ...rest } = state.settings;
+  const { apiKey, openaiKey, proxyToken, gistToken, ...rest } = state.settings;
   return rest;
 }
 
@@ -66,7 +71,9 @@ const state = {
   customExercises: [],  // eigene Übungen: { id, name, primary, secondary, weightStep, barbell, tips, aliases }
   foods: [],            // Lebensmittel: { id, name, brand, source, per100:{kcal,protein,carbs,fat}, unit, portions:[{label,grams}], barcode, favorite, uses, lastUsed }
   recipes: [],          // Rezepte: { id, name, servings, items:[{ foodId, name, grams, per100 }], note }
-  diary: {},            // Tagebuch: { "YYYY-MM-DD": [{ id, meal, kind, refId, name, grams, servings, kcal, protein, carbs, fat, at }] }
+  diary: {},            // Tagebuch: { "YYYY-MM-DD": [{ id, meal, kind, refId, name, grams, servings, kcal, protein, carbs, fat, at, source }] }
+  aiMeals: [],          // „Zuletzt analysiert“ (Foto-Schätzungen, ohne Bild): { id, at, mealName, confidence, items, totals }
+  pantry: [],           // Vorrat für den Rezeptgenerator: { name, addedAt, expiresAt? }
 };
 
 const listeners = new Set();
@@ -91,6 +98,8 @@ export function load() {
       state.foods = data.foods || [];
       state.recipes = data.recipes || [];
       state.diary = data.diary || {};
+      state.aiMeals = data.aiMeals || [];
+      state.pantry = data.pantry || [];
     }
   } catch (e) {
     console.error('Konnte Daten nicht laden', e);
@@ -113,6 +122,8 @@ export function save(immediate = false) {
         foods: state.foods,
         recipes: state.recipes,
         diary: state.diary,
+        aiMeals: state.aiMeals,
+        pantry: state.pantry,
         savedAt: Date.now(),
       }));
     } catch (e) {
@@ -447,6 +458,8 @@ export function exportJSON() {
     foods: state.foods,
     recipes: state.recipes,
     diary: state.diary,
+    aiMeals: state.aiMeals,
+    pantry: state.pantry,
   }, null, 2);
 }
 
@@ -465,7 +478,7 @@ export function importJSON(text, { merge = true } = {}) {
   state.sessions.sort((a, b) => a.startedAt - b.startedAt);
   if (data.settings) {
     // Geheimnisse und Geräte-Zustand des anderen Geräts nicht übernehmen
-    const { apiKey, openaiKey, gistToken, gistId, cloudLastSync, cloudLastError, ...rest } = data.settings;
+    const { apiKey, openaiKey, proxyToken, gistToken, gistId, cloudLastSync, cloudLastError, ...rest } = data.settings;
     Object.assign(state.settings, rest);
   }
   if (data.exerciseSettings) Object.assign(state.exerciseSettings, data.exerciseSettings);
@@ -483,6 +496,7 @@ export function importJSON(text, { merge = true } = {}) {
     const ids = new Set(state[key].map(x => x.id));
     for (const x of data[key]) if (!ids.has(x.id)) state[key].push(x);
   }
+  if (Array.isArray(data.pantry) && !state.pantry.length) state.pantry = data.pantry;
   if (data.diary && typeof data.diary === "object") {
     for (const [day, list] of Object.entries(data.diary)) {
       const cur = state.diary[day] = state.diary[day] || [];
@@ -520,7 +534,7 @@ export function resetAll() {
   state.exerciseSettings = {};
   state.body = [];
   state.customExercises = [];
-  state.foods = []; state.recipes = []; state.diary = {};
+  state.foods = []; state.recipes = []; state.diary = {}; state.aiMeals = []; state.pantry = [];
   state.settings = { ...DEFAULT_SETTINGS };
   save(true);
   emit('plans'); emit('sessions'); emit('settings'); emit('workout');
@@ -608,4 +622,27 @@ export function copyDiaryDay(fromKey, toKey, meal = null) {
   save();
   emit('nutrition');
   return src.length;
+}
+
+// ---------- KI: Foto-Analysen (Verlauf) und Vorrat ----------
+
+export function getAiMeals() { return state.aiMeals; }
+
+/** Analyse ohne Bild merken (max. 20) */
+export function rememberAiMeal(meal) {
+  const e = { id: uid(), at: Date.now(), ...meal };
+  state.aiMeals.unshift(e);
+  state.aiMeals = state.aiMeals.slice(0, 20);
+  save();
+  return e;
+}
+
+export function getPantry() { return state.pantry; }
+
+export function setPantry(items) {
+  const seen = new Set();
+  state.pantry = items.map(i => typeof i === 'string' ? { name: i.trim(), addedAt: Date.now() } : i)
+    .filter(i => i.name && !seen.has(i.name.toLowerCase()) && seen.add(i.name.toLowerCase()));
+  save();
+  emit('nutrition');
 }

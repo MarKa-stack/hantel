@@ -37,6 +37,9 @@ Kein Build-Schritt, kein Backend – reines HTML/CSS/JavaScript, Daten bleiben a
 - **CSV-Export** aller Sätze (Semikolon, BOM – Excel/Numbers)
 - **Eigene Übungen**: Name, Aliase, Primär-/Sekundärmuskeln, Gewichtsschritt, Langhantel, Tipps – zählen in Bilanz, Erholung, Progression und Scheibenrechner (`js/views/custom-exercise.js`)
 - **Essen (Kalorienzähler)**: Barcode-Scanner (Kamera; native BarcodeDetector, sonst ZXing vom CDN, `js/scanner.js`), Tagebuch mit Kalorienring und Makro-Balken, vier Mahlzeiten, Einträge ändern/verschieben/löschen, „Gestern kopieren“. Lebensmittel aus drei Quellen: Basistabelle (~90 Grundnahrungsmittel, `js/food-db.js`), Open Food Facts (Textsuche mit Deutschland-Filter + EAN-Eingabe, `js/off.js`) und eigene Einträge mit Portionen/Favoriten. **KI-Freitext** („3 Eier, 2 Scheiben Vollkornbrot, 1 Banane“) → Claude schätzt Mengen und Nährwerte, Prüfliste, ins Tagebuch oder als Rezept (`js/ai-food.js`). **Rezepte** mit Zutaten × Gramm und Portionen, als Portion loggbar. **Ziele**: TDEE (Mifflin-St Jeor) aus Körperlog + Größe/Alter/Aktivität, Ziel Aufbau/Halten/Abnehmen, Protein pro kg; **adaptive Anpassung**: Wochenschnitt der Kalorien gegen den Gewichtstrend → ±100 kcal-Vorschlag (`js/nutrition.js`). Kachel „Essen heute“ auf dem Start, eigener Tab.
+- **Essen fotografieren**: Kamera/Galerie → Bild clientseitig auf 1024 px verkleinert und ohne EXIF neu kodiert → KI schätzt Gericht, Bestandteile, Gramm und Nährwerte (`food-image`-Aufgabe, JSON-Schema) → Prüf-Editor (Name, Bestandteile, Gramm-Stepper skaliert Makros, Werte direkt editierbar, hinzufügen/entfernen) → Tagebuch-Eintrag `kind: "ai", source: "ai_image"` mit Confidence high/medium/low, Datenschutzhinweis vor der ersten Analyse, „Zuletzt analysiert“ (`js/views/food-photo.js`)
+- **Rezept aus Zutaten**: Zutaten-Chips, Vorrat speichern/laden, Optionen (kcal min/max, Protein, Portionen, Zeit, Ernährungsform, Ausschlüsse, „Heute übrig“ aus den Tageszielen) → KI-Rezept mit ✓ vorhanden / „Zusätzlich benötigt“, Schritten und Nährwerten pro Portion → als Rezept speichern oder als Mahlzeit eintragen (Tag + Mahlzeit); **Rezepte im Web** über die OpenAI-Websuche – nur Treffer mit tatsächlich zitierter URL, verlinkt auf die Originalseite, kein Scraping (`js/views/food-generate.js`)
+- **KI-Backend (Cloudflare Worker, `worker/`)**: OpenAI-Key nur als Worker-Secret, App spricht per Zugangstoken mit `POST /ai/<aufgabe>`; Prompts/Schemas in `js/ai-tasks.js` (geteilt, Worker wird per `tools/build-worker.ps1` gebaut); Rate-Limit pro IP, Tageslimit, Parallelitäts-Limit, Timeout, Eingabe- und Schema-Prüfung, Nutzungszähler; alternativ weiterhin eigener Claude-/OpenAI-Key im Gerät
 - **Premium-Details**: Dashboard mit Wochenring/Serie/letztem PR, Display-Schrift (Space Grotesk) für Titel und Zahlen, eigenes SVG-Icon-Set, Seitenübergänge und Mikro-Animationen (Haken zeichnet sich, Einrasten, Count-up, aufleuchtende Muskelkarte; `prefers-reduced-motion` wird respektiert), fokussierter Workout-Screen (kompakter Kopf, nur der aktuelle Satz groß, Pausenring inline, Auto-Scroll zum Ring), Begrüßung mit Namen (unter „Mehr“), iOS-Splash-Screens, Haptik über switch-Checkbox (iOS 17.4+)
 - **Offline** dank Service Worker; Dark ist Standard, Hell/Auto unter „Mehr“
 
@@ -87,7 +90,9 @@ js/food-db.js         Basistabelle Lebensmittel
 js/off.js             Open Food Facts (Suche, EAN)
 js/ai-food.js         KI-Freitext → Zutaten
 js/pdf-import.js      pdf.js-Textextraktion + Mustererkennung
-js/llm.js             KI-Zugang: Claude oder OpenAI, JSON-Schema-Antworten
+js/llm.js             KI-Zugang: Hantel-Server (Worker) oder eigener Claude-/OpenAI-Key; runTask()
+js/ai-tasks.js        KI-Aufgaben: Prompts, JSON-Schemas, Eingabe-/Antwortprüfung (Client + Worker)
+worker/               Cloudflare Worker (index.js generiert aus worker.src.js + ai-tasks.js), README mit Deploy-Schritten
 js/ai-import.js       PDF → Trainingspläne (über llm.js)
 js/figure.js          Strichfiguren-Renderer (Posen über Gelenkwinkel, SMIL-Animation)
 js/exercise-db.js     Übungsbibliothek: Figuren, Muskeln, Tipps, Namenszuordnung

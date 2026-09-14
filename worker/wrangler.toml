@@ -1,0 +1,21 @@
+# Nur nötig, wenn du mit Wrangler (Node) deployst. Ohne Node: worker/index.js im Cloudflare-Dashboard einfügen.
+name = "hantel-ai"
+main = "index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+OPENAI_MODEL = "gpt-5-mini"
+# OPENAI_VISION_MODEL = "gpt-5-mini"
+# OPENAI_SEARCH_MODEL = "gpt-5-mini"
+ALLOWED_ORIGINS = "https://marka-stack.github.io"
+DAILY_LIMIT = "200"
+RATE_PER_10MIN = "20"
+MAX_CONCURRENT = "3"
+TIMEOUT_MS = "60000"
+
+# Secrets (nie in diese Datei): wrangler secret put OPENAI_API_KEY / wrangler secret put APP_TOKEN
+
+# Optional: KV für Limits und Zähler über alle Worker-Instanzen (wrangler kv namespace create HANTEL_KV)
+# [[kv_namespaces]]
+# binding = "HANTEL_KV"
+# id = "…"
