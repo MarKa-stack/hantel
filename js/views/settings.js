@@ -1,9 +1,10 @@
 // Mehr: Einstellungen, KI-Import, Datensicherung, Installation
-import { h, svgIcon, toast, confirmSheet, download, isIOS } from '../util.js';
-import { getSettings, updateSettings, exportJSON, importJSON, resetAll, getSessions, getPlans } from '../store.js';
+import { h, svgIcon, toast, confirmSheet, fmtDate, isIOS } from '../util.js';
+import { getSettings, updateSettings, importJSON, resetAll, getSessions, getPlans } from '../store.js';
 import { testApiKey } from '../ai-import.js';
+import { exportBackup } from '../backup.js';
 
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.5.0';
 
 const MODELS = [
   ['claude-opus-5', 'Claude Opus 5 – beste Erkennung (Standard)'],
@@ -14,7 +15,7 @@ const MODELS = [
 export function render(root) {
   const s = getSettings();
 
-  root.append(h('div.page-head', {}, [h('div', {}, [h('div.eyebrow', { text: 'Hantel' }), h('h1', { text: 'Mehr' })])]));
+  root.append(h('div.page-head', {}, [h('div', {}, [h('h1', { text: 'Mehr' })])]));
 
   // ---------- Bibliothek & Vorlagen ----------
   root.append(h('div.card.tappable', { onclick: () => { location.hash = '#/library'; } }, [
@@ -53,10 +54,13 @@ export function render(root) {
   } })));
   const goalIn = h('input.input.num', { type: 'number', inputmode: 'numeric', value: s.weeklyGoal || 4, min: 1, max: 14, style: { width: '80px' } });
   goalIn.addEventListener('change', () => { const v = parseInt(goalIn.value, 10); if (v > 0) updateSettings({ weeklyGoal: v }); });
+  const nameIn = h('input.input', { type: 'text', value: s.name || '', placeholder: 'Vorname', autocomplete: 'given-name', style: { width: '150px', minHeight: '42px' } });
+  nameIn.addEventListener('change', () => updateSettings({ name: nameIn.value.trim() }));
 
   root.append(h('div.subhead', {}, [h('h2', { text: 'Darstellung' })]));
   root.append(h('div.card', {}, [
     switchRow('Erscheinungsbild', 'Dunkel ist Standard – Hell oder automatisch nach System', themeSeg),
+    switchRow('Dein Name', 'Für die Begrüßung auf dem Startbildschirm', nameIn),
     switchRow('Wochenziel', 'Trainings pro Woche für den Ring auf dem Startbildschirm', goalIn),
   ]));
 
@@ -112,13 +116,10 @@ export function render(root) {
   });
 
   root.append(h('div.card', {}, [
-    h('p.small.muted', { text: `${getPlans().length} Pläne · ${getSessions().length} Workouts gespeichert. Die Daten liegen nur in diesem Browser – sichere sie regelmäßig.` }),
+    h('p.small.muted', { text: `${getPlans().length} Pläne · ${getSessions().length} Workouts gespeichert. Die Daten liegen nur in diesem Browser – sichere sie regelmäßig.`
+      + (s.lastBackupAt ? ` Letzte Sicherung: ${fmtDate(s.lastBackupAt)}.` : ' Noch keine Sicherung erstellt.') }),
     h('div.grid-2.mt', {}, [
-      h('button.btn.ghost', { text: 'Sicherung exportieren', onclick: () => {
-        const d = new Date(), stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        download(`hantel-backup-${stamp}.json`, exportJSON());
-        toast('Sicherung erstellt');
-      } }),
+      h('button.btn.ghost', { text: 'Sicherung exportieren', onclick: exportBackup }),
       h('button.btn.ghost', { text: 'Sicherung einspielen', onclick: () => fileIn.click() }),
     ]),
     fileIn,

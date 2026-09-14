@@ -1,6 +1,6 @@
 // Einstieg: Router, Tab-Bar, Service Worker
 import { load, getActiveWorkout, subscribe, getSettings } from './store.js';
-import { toast, h, illustration } from './util.js';
+import { toast, h, illustration, closeAllSheets } from './util.js';
 import { restTimer } from './timer.js';
 
 import * as plans from './views/plans.js';
@@ -58,6 +58,7 @@ function render() {
   if (!match) { navigate('/plans', true); return; }
 
   if (current?.view?.unmount) { try { current.view.unmount(); } catch (e) { console.error(e); } }
+  closeAllSheets(); // offene Sheets gehören zur alten Seite (Zurück-Geste, Tab-Wechsel)
 
   // Übergang: Detailseite im selben Tab → Slide von rechts, zurück zur Tab-Wurzel → Slide von links, Tab-Wechsel → Fade
   const isRoot = ROOTS.has(path);
@@ -103,6 +104,8 @@ load();
 applyTheme();
 const seeded = seedTemplates();
 render();
+// Safari darf Site-Daten nach 7 Tagen ohne Nutzung löschen – „persistent“ anfragen (still, ohne Dialog)
+navigator.storage?.persist?.().catch(() => {});
 if (seeded) toast(`${seeded} Trainingspläne angelegt: Oberkörper & Unterkörper A/B`, { duration: 5000 });
 
 // Laufendes Workout beim Start wieder öffnen

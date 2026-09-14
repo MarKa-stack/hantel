@@ -1,11 +1,12 @@
 // Trainingsmodus: eine Übung pro Seite, große Stepper, letztes Training + Empfehlung, PR-Erkennung
-import { h, svgIcon, fmtDuration, fmtNum, fmtDate, confirmSheet, openSheet, toast, haptic, parseNum, countUp, iconBox } from '../util.js';
+import { h, svgIcon, fmtDuration, fmtNum, fmtShortDate, confirmSheet, openSheet, toast, haptic, parseNum, countUp } from '../util.js';
 import { getActiveWorkout, touchWorkout, finishWorkout, cancelWorkout, getSettings, sessionVolume, getExerciseSettings, updateExerciseSettings } from '../store.js';
-import { restTimer, unlockAudio, setWakeLockWanted } from '../timer.js';
+import { restTimer, unlockAudio, keepAlive, setWakeLockWanted } from '../timer.js';
 import { recommend, detectSetPRs, sessionPRs, fmtKg, PR_LABELS, warmupSets, platesFor } from '../progression.js';
 import { findExercise, EXERCISES } from '../exercise-db.js';
 import { muscleSets, bodyMapSvg, MUSCLE_NAME, musclesFor } from '../muscles.js';
 import { openExerciseInfo, figureThumb } from './exercise-info.js';
+import { backupDue, exportBackup } from '../backup.js';
 
 let cleanup = [];
 let rootEl = null;
@@ -74,9 +75,18 @@ export function render(root, { navigate }) {
     const i = w.currentIndex, n = w.entries.length;
     const cur = w.entries[i];
     const curDone = cur.sets.length && cur.sets.every(s => s.done);
-    nav.append(h('button.btn.ghost', { html: svgIcon.back + '<span>Vorherige</span>', disabled: i === 0, onclick: () => go(i - 1) }));
-    if (i < n - 1) nav.append(h('button.btn' + (curDone ? '.primary' : ''), { html: '<span>Nächste Übung</span>' + svgIcon.chevron.replace('class="chev"', 'style="fill:currentColor;width:20px;height:20px"'), onclick: () => go(i + 1) }));
-    else nav.append(h('button.btn.good', { html: svgIcon.check + '<span>Training abschließen</span>', onclick: finish }));
+    nav.append(h('button.btn.ghost', { html: svgIcon.back + '<span>Zurück</span>', disabled: i === 0, onclick: () => go(i - 1) }));
+    if (i < n - 1) nav.append(h('button.btn' + (curDone ? '.primary' : ''), { html: '<span>Weiter</span>' + svgIcon.chevron.replace('class="chev"', 'style="fill:currentColor;width:20px;height:20px"'), onclick: () => go(i + 1) }));
+    else nav.append(h('button.btn.good', { html: svgIcon.check + '<span>Abschließen</span>', onclick: finish }));
+  };
+
+  /** Element im Scrollbereich unter den klebenden Kopf holen */
+  const scrollTo = (el) => {
+    if (!el) return;
+    const headH = root.querySelector('.workout-head')?.offsetHeight || 0;
+    const top = el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop - headH - 8;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    root.scrollTo({ top: Math.max(0, top), behavior: reduce ? 'auto' : 'smooth' });
   };
 
   const go = (i) => {
@@ -102,91 +112,93 @@ export function render(root, { navigate }) {
     const prev = w.entries[i - 1], next = w.entries[i + 1];
     const supersetWith = entry.superset && next ? next : (prev?.superset ? prev : null);
 
-    // Kopfbereich der Übung
+    // Kopfbereich der Übung – kompakt, damit Satz und Pausenring ohne Scrollen sichtbar sind
     body.append(h('div.wk-step', { text: `Übung ${i + 1} von ${w.entries.length}`, style: { margin: '4px 0 8px' } }));
+    const thumb = figureThumb(entry.name);
     body.append(h('div.wk-ex', {}, [
-      figureThumb(entry.name) ? h('div', { onclick: showInfo }, [figureThumb(entry.name)]) : null,
+      thumb ? h('div', { onclick: showInfo }, [thumb]) : null,
       h('div.grow', {}, [
         h('div.wk-name', { text: entry.name }),
         lib ? h('div.wk-muscles', { text: lib.muscles }) : null,
         h('div.wk-target', { text: targetTxt }),
         supersetWith ? h('div', { style: { marginTop: '4px' } }, [h('span.pill.accent', { text: '⇅ Supersatz mit ' + supersetWith.name })]) : null,
         entry.swappedFrom ? h('div.small.faint', { text: `Getauscht (statt ${entry.swappedFrom}) – nur für heute` }) : null,
-        h('div.row', { style: { marginTop: '6px', gap: '8px', flexWrap: 'wrap' } }, [
-          h('button.btn.sm.ghost', { html: svgIcon.info.replace('class="ico"', 'class="ico sm"') + '<span>Ausführung</span>', onclick: showInfo }),
-          h('button.btn.sm.ghost', { html: svgIcon.swap.replace('class="ico"', 'class="ico sm"') + '<span>Tauschen</span>', onclick: () => swapExercise(entry) }),
-        ]),
+      ]),
+      h('div.wk-actions', {}, [
+        h('button.btn.icon.ghost', { 'aria-label': 'Ausführung', title: 'Ausführung', html: svgIcon.info, onclick: showInfo }),
+        h('button.btn.icon.ghost', { 'aria-label': 'Übung tauschen', title: 'Tauschen', html: svgIcon.swap, onclick: () => swapExercise(entry) }),
       ]),
     ]));
     if (entry.note) body.append(h('p.small.muted', { text: entry.note, style: { marginTop: '8px' } }));
 
-    // Maschineneinstellungen (übungsübergreifend gespeichert)
-    const es = getExerciseSettings(entry.name);
-    const setupIn = h('input.input', { type: 'text', value: es.setup || '', placeholder: 'Maschineneinstellungen: Sitz 4, Griffhöhe 3, Pin links …', style: { minHeight: '42px', fontSize: '15px' } });
-    setupIn.addEventListener('change', () => updateExerciseSettings(entry.name, { setup: setupIn.value.trim() }));
-    body.append(h('div.row', { style: { marginTop: '10px', gap: '8px' } }, [h('span', { html: svgIcon.wrench, style: { color: 'var(--text-3)', display: 'inline-flex' } }), setupIn]));
+    // Maschineneinstellungen (übungsübergreifend gespeichert): Einzeiler, Tipp → Eingabefeld
+    body.append(setupRow(entry));
 
-    // Letztes Training + Empfehlung
+    // Letztes Training + Empfehlung auf einer Zeile; die Begründung nur, wenn sie etwas ändert
     const lastEntry = rec.last?.entry, lastDate = rec.last?.session?.startedAt;
     const recTxt = rec.weight != null
       ? `${fmtKg(rec.weight)} × ${range ? (range.min === range.max ? range.min : `${range.min}–${range.max}`) : entry.targetReps}`
       : `– × ${entry.targetReps}`;
-    body.append(h('div.card.mt', {}, [
+    const lastTxt = lastEntry ? fmtLastSets(lastEntry.sets) : '–';
+    const showMsg = rec.status !== 'keep' || rec.decline;
+    body.append(h('div.card.mt.wk-brief', {}, [
       h('div.wk-last', {}, [
         h('div', {}, [
-          h('div.lbl', { text: 'Letztes Training' + (lastDate ? ` · ${fmtDate(lastDate)}` : '') }),
-          lastEntry
-            ? h('div.val', { html: lastEntry.sets.map(s => `${fmtKg(s.weight)} × ${s.reps ?? '–'}`).join('<br>') })
-            : h('div.muted.small', { text: 'Noch keine Einheit protokolliert.' }),
+          h('div.lbl', { text: 'Zuletzt' + (lastDate ? ` · ${fmtShortDate(lastDate)}` : '') }),
+          h('div.val', { text: lastTxt }),
         ]),
         h('div', {}, [
-          h('div.lbl', { text: 'Heute empfohlen' }),
+          h('div.lbl', { text: 'Heute' }),
           h('div.val.rec', { text: recTxt }),
-          h('div.msg', { text: rec.message }),
-          rec.decline ? h('div.msg.warn', { text: 'Letzte Einheit lag unter deinem bisherigen Leistungsniveau. Gewicht reduzieren bleibt deine Entscheidung.' }) : null,
         ]),
       ]),
+      showMsg ? h('div.msg' + (rec.decline ? '.warn' : ''), { text: rec.decline ? 'Letzte Einheit lag unter deinem bisherigen Niveau – Gewicht reduzieren bleibt deine Entscheidung.' : rec.message }) : null,
     ]));
 
     // Sätze
     const setsBox = h('div.mt');
     body.append(setsBox);
+    const warmBox = h('div');
+    // Aufwärmsätze: aus dem Gewicht von Satz 1, nur solange noch kein Arbeitssatz erledigt ist
+    const drawWarmup = () => {
+      warmBox.innerHTML = '';
+      if (!getSettings().warmupSets || entry.sets.some(s => s.done)) return;
+      const workW = entry.sets[0]?.weight;
+      if (!workW) return;
+      const noneDone = !entry.warmup || entry.warmup.every(s => !s.done);
+      if (entry.warmup == null || (noneDone && entry.warmupFor !== workW)) {
+        entry.warmup = warmupSets(workW, entry.weightStep || 2.5).map(s => ({ ...s, done: false }));
+        entry.warmupFor = workW;
+        touchWorkout();
+      }
+      if (!entry.warmup.length) return;
+      const det = h('details.warmup', { open: entry.warmup.some(s => s.done) });
+      const doneN = entry.warmup.filter(s => s.done).length;
+      det.append(h('summary', { html: `<span>Aufwärmen · ${entry.warmup.length} Sätze</span><span class="faint">${doneN}/${entry.warmup.length} · zählt nicht als Volumen</span>` }));
+      entry.warmup.forEach((ws) => {
+        const pct = Math.round((ws.weight / workW) * 100);
+        det.append(h('div.warm-row' + (ws.done ? '.done' : ''), {}, [
+          h('div.grow', {}, [h('span.mono', { text: `${fmtKg(ws.weight)} × ${ws.reps}` }), h('span.faint.small', { text: ` · ${pct} %` })]),
+          h('button.btn.sm' + (ws.done ? '.ghost' : ''), { html: ws.done ? svgIcon.check : '<span>Fertig</span>', onclick: () => {
+            unlockAudio();
+            ws.done = !ws.done; touchWorkout();
+            if (ws.done && getSettings().autoRestTimer) { restForEntry = entry; restTimer.start(Math.min(60, entry.restSec || 60)); }
+            drawWarmup();
+          } }),
+        ]));
+      });
+      warmBox.append(det);
+    };
     const drawSets = () => {
       setsBox.innerHTML = '';
-      // Aufwärmsätze: aus dem Arbeitsgewicht des ersten Satzes, zählen nicht als Arbeitssätze
-      if (getSettings().warmupSets) {
-        const workW = entry.sets[0]?.weight;
-        const noneDone = !entry.warmup || entry.warmup.every(s => !s.done);
-        if (workW && (entry.warmup == null || (noneDone && entry.warmupFor !== workW))) {
-          entry.warmup = warmupSets(workW, entry.weightStep || 2.5).map(s => ({ ...s, done: false }));
-          entry.warmupFor = workW;
-          touchWorkout();
-        }
-        if (entry.warmup && entry.warmup.length) {
-          const det = h('details.warmup');
-          const doneN = entry.warmup.filter(s => s.done).length;
-          det.append(h('summary', { html: `<span>Aufwärmen · ${entry.warmup.length} Sätze</span><span class="faint">${doneN}/${entry.warmup.length} · zählt nicht als Volumen</span>` }));
-          entry.warmup.forEach((ws, wi) => {
-            const pct = Math.round((ws.weight / workW) * 100);
-            det.append(h('div.warm-row' + (ws.done ? '.done' : ''), {}, [
-              h('div.grow', {}, [h('span.mono', { text: `${fmtKg(ws.weight)} × ${ws.reps}` }), h('span.faint.small', { text: ` · ${pct} %` })]),
-              h('button.btn.sm' + (ws.done ? '.ghost' : ''), { html: ws.done ? svgIcon.check : '<span>Fertig</span>', onclick: () => {
-                unlockAudio();
-                ws.done = !ws.done; touchWorkout();
-                if (ws.done && getSettings().autoRestTimer) { restForEntry = entry; restTimer.start(Math.min(60, entry.restSec || 60)); }
-                drawSets();
-              } }),
-            ]));
-          });
-          setsBox.append(det);
-        }
-      }
+      setsBox.append(warmBox);
+      drawWarmup();
       // Fokus: genau ein Satz ist „aktuell“ (groß), erledigte und kommende sind einzeilig
       const firstOpen = entry.sets.findIndex(s => !s.done);
       const cur = entry.expanded != null && entry.sets[entry.expanded] ? entry.expanded : (firstOpen >= 0 ? firstOpen : -1);
       entry.sets.forEach((set, si) => {
         if (si === cur && restTimer.active && !set.done && restForEntry === entry) setsBox.append(restCard(entry, set, si));
-        if (si === cur) setsBox.append(setCard(entry, set, si, i, drawSets));
+        if (si === cur) setsBox.append(setCard(entry, set, si, i, drawSets, si === 0 ? drawWarmup : null));
         else setsBox.append(setRow(entry, set, si, drawSets));
       });
       setsBox.append(h('div.add-set', {}, [
@@ -209,7 +221,7 @@ export function render(root, { navigate }) {
     }, [
       set.done ? h('span.mini-check', { html: svgIcon.check }) : h('span.no', { text: String(si + 1) }),
       h('span.sum', { text: `${fmtKg(set.weight)} × ${set.reps ?? '–'}` }),
-      h('span.tag', { text: set.done ? (set.rir != null ? `RIR ${set.rir}` : 'erledigt') : `Satz ${si + 1}` }),
+      h('span.tag', { text: set.done ? (set.rir != null ? `RIR ${set.rir}` : '') : `Satz ${si + 1}` }),
     ]);
     return row;
   };
@@ -225,7 +237,7 @@ export function render(root, { navigate }) {
     const time = h('div.time', { text: fmtDuration(restTimer.remaining()) });
     const card = h('div.rest-ring.pop', {}, [
       h('div.ringbox', {}, [ringSvg, h('div.inner', { html: svgIcon.clock })]),
-      h('div', {}, [h('div.lbl', { text: restTimer.running ? 'Pause' : 'Pausiert' }), time, h('div.next', { text: `Als Nächstes: Satz ${si + 1} · ${fmtKg(set.weight)} × ${set.reps ?? '–'}` })]),
+      h('div.grow', {}, [h('div.lbl', { text: restTimer.running ? 'Pause' : 'Pausiert' }), time, h('div.next', { text: `Satz ${si + 1}: ${fmtKg(set.weight)} × ${set.reps ?? '–'}` })]),
       h('div.btns', {}, [
         h('button.btn.ghost', { text: '+30s', onclick: (e) => { e.stopPropagation(); restTimer.add(30); } }),
         h('button.btn.primary', { text: 'Skip', onclick: (e) => { e.stopPropagation(); restTimer.stop(true); } }),
@@ -236,7 +248,7 @@ export function render(root, { navigate }) {
   };
 
   // ---------- Aktueller Satz: Karte mit Steppern ----------
-  const setCard = (entry, set, si, exIdx, redrawAll) => {
+  const setCard = (entry, set, si, exIdx, redrawAll, onWeightChange) => {
     const card = h('div.card.set-card.current' + (set.done ? '.done' : ''));
     const step = entry.weightStep || 2.5;
     const sum = h('div.set-sum', { text: `${fmtKg(set.weight)} × ${set.reps ?? '–'}` });
@@ -249,7 +261,7 @@ export function render(root, { navigate }) {
     const updateSum = () => { sum.textContent = `${fmtKg(set.weight)} × ${set.reps ?? '–'}` + (set.rir != null ? ` · RIR ${set.rir}` : ''); };
     const weightStepper = stepper({
       value: set.weight, step, unit: getSettings().unit, min: 0, decimals: true,
-      onChange: (v) => { set.weight = v; updateSum(); touchWorkout(); },
+      onChange: (v) => { set.weight = v; updateSum(); touchWorkout(); onWeightChange?.(); },
       onTap: (setValue) => openWeightSheet(entry, set.weight, (v) => { setValue(v); }),
     });
     const repsStepper = stepper({
@@ -283,9 +295,8 @@ export function render(root, { navigate }) {
         set.doneAt = Date.now();
         entry.expanded = null; // nächster offener Satz wird aktuell
         haptic(15);
-        // Nächsten offenen Satz vorbelegen
-        const next = entry.sets[si + 1];
-        if (next && !next.done) { if (next.weight == null) next.weight = set.weight; if (next.reps == null) next.reps = set.reps; }
+        // Alle noch offenen Sätze ohne Werte vorbelegen
+        for (const s of entry.sets) if (!s.done) { if (s.weight == null) s.weight = set.weight; if (s.reps == null) s.reps = set.reps; }
         touchWorkout();
         // PR-Erkennung gegen Historie + frühere Sätze dieses Workouts
         const earlier = entry.sets.filter((s, j) => j !== si && s.done);
@@ -307,7 +318,10 @@ export function render(root, { navigate }) {
           }
         }
 
-        // Haken zeichnen + Karte einrasten, dann zum kompakten Layout wechseln
+        // Lautloses Keep-Alive-Audio muss synchron in der Tipp-Geste starten (iOS), der Timer darf später kommen
+        if (startRest) keepAlive.start();
+
+        // Haken zeichnen + Karte einrasten, dann zum kompakten Layout wechseln und den Pausenring ins Bild holen
         btn.innerHTML = svgIcon.checkDraw + '<span>Erledigt</span>';
         btn.className = 'btn block set-done-btn ghost';
         card.classList.add('snap', 'done');
@@ -315,6 +329,7 @@ export function render(root, { navigate }) {
         setTimeout(() => {
           if (startRest) { restForEntry = entry; restTimer.start(entry.restSec || getSettings().defaultRestSec); }
           redrawAll(); drawProgress(); drawNav();
+          scrollTo(restEls?.card || body.querySelector('.set-card.current'));
         }, reduce ? 0 : 420);
       },
     });
@@ -362,16 +377,17 @@ export function render(root, { navigate }) {
     openSheet((sheet, close) => {
       const input = h('input.input.num', { type: 'text', inputmode: 'decimal', value: String(value).replace('.', ','), style: { fontSize: '26px', minHeight: '60px' } });
       const platesBox = h('div');
-      const barSeg = h('div.seg', {}, [20, 15, 10, 0].map(b => h('button', { text: b ? `${b} kg` : 'Keine Stange', class: bar === b ? 'active' : '', onclick: () => {
+      const barLabel = (b) => b ? `${b} kg` : 'Ohne';
+      const barSeg = h('div.seg', {}, [20, 15, 10, 0].map(b => h('button', { text: barLabel(b), class: bar === b ? 'active' : '', onclick: () => {
         bar = b; updateExerciseSettings(entry.name, { barWeight: b });
-        for (const x of barSeg.children) x.classList.toggle('active', x.textContent === (b ? `${b} kg` : 'Keine Stange'));
+        for (const x of barSeg.children) x.classList.toggle('active', x.textContent === barLabel(b));
         drawPlates();
       } })));
       const drawPlates = () => {
         platesBox.innerHTML = '';
         const v = parseNum(input.value);
         if (v == null) return;
-        if (!bar) { platesBox.append(h('p.small.faint', { text: 'Ohne Stange (Maschine/Kurzhantel): keine Scheibenberechnung.' })); return; }
+        if (!bar) { platesBox.append(h('p.small.faint', { text: 'Ohne Stange: keine Scheibenberechnung.' })); return; }
         if (v < bar) { platesBox.append(h('p.small.faint', { text: `Zielgewicht liegt unter dem Stangengewicht (${fmtKg(bar)}).` })); return; }
         const r = platesFor(v, bar);
         platesBox.append(h('div.small.faint', { text: 'Pro Seite' }));
@@ -382,11 +398,16 @@ export function render(root, { navigate }) {
       const quick = h('div.grid-4', {}, [-5, -2.5, 2.5, 5].map(d => h('button.btn.sm.ghost', { text: (d > 0 ? '+' : '') + String(d).replace('.', ','), onclick: () => {
         const v = Math.max(0, (parseNum(input.value) || 0) + d); input.value = String(Math.round(v * 100) / 100).replace('.', ','); drawPlates();
       } })));
+      // Maschine/Kabel/Kurzhantel: Scheibenrechner eingeklappt, per Link erreichbar
+      const platesSection = h('div', { hidden: !isBarbell && es.barWeight == null }, [
+        h('div.subhead', { style: { margin: '14px 0 6px' } }, [h('h2', { text: 'Scheibenrechner' })]),
+        barSeg, h('div.mt', {}, [platesBox]),
+      ]);
+      const platesLink = h('button.btn.sm.ghost.mt', { text: 'Scheibenrechner anzeigen', hidden: !platesSection.hidden, onclick: () => { platesSection.hidden = false; platesLink.hidden = true; } });
       sheet.append(
         h('h2', { text: 'Gewicht' }),
         input, h('div.mt', {}, [quick]),
-        h('div.subhead', { style: { margin: '14px 0 6px' } }, [h('h2', { text: 'Scheibenrechner' })]),
-        barSeg, h('div.mt', {}, [platesBox]),
+        platesLink, platesSection,
         h('div.actions', {}, [
           h('button.btn.ghost', { text: 'Abbrechen', onclick: close }),
           h('button.btn.primary', { text: 'Übernehmen', onclick: () => { const v = parseNum(input.value); if (v != null) commit(v); close(); } }),
@@ -421,6 +442,7 @@ export function render(root, { navigate }) {
     const prs = sessionPRs(preview);
     const ms = muscleSets([preview]);
     const trained = Object.entries(ms.totals).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+    restTimer.stop(true); // wer abschließt, braucht keine Pause mehr
 
     openSheet((sheet, close) => {
       const note = h('textarea.input', { placeholder: 'Wie lief’s? (optional)' });
@@ -456,8 +478,10 @@ export function render(root, { navigate }) {
             close();
             restTimer.stop(true);
             const s = finishWorkout(note.value.trim());
-            toast(prs.length ? `Gespeichert – ${prs.length} neue${prs.length === 1 ? 'r' : ''} Rekord${prs.length === 1 ? '' : 'e'}!` : 'Workout gespeichert ');
+            toast(prs.length ? `Gespeichert – ${prs.length} neue${prs.length === 1 ? 'r' : ''} Rekord${prs.length === 1 ? '' : 'e'}!` : 'Workout gespeichert');
             navigate('/session/' + s.id + '?fresh=1', true);
+            // Daten liegen nur auf dem Gerät – alle 10 Workouts an die Sicherung erinnern
+            if (backupDue()) setTimeout(() => toast('10 Workouts seit der letzten Sicherung', { action: { label: 'Jetzt sichern', fn: exportBackup }, duration: 9000 }), 2600);
           } }),
         ]),
       );
@@ -500,6 +524,43 @@ function stepper({ value, step, unit, min = 0, decimals, onChange, onTap }) {
 }
 
 function fmtSets(n) { return (Number.isInteger(n) ? n : n.toFixed(1).replace('.', ',')) + ' S.'; }
+
+/** „60 × 6 · 6 · 5“ – gleiches Gewicht wird zusammengefasst, sonst „60 × 6 · 65 × 5“ */
+function fmtLastSets(sets) {
+  const parts = [];
+  let curW = null, reps = [];
+  const flush = () => { if (reps.length) parts.push(`${fmtKg(curW)} × ${reps.join(' · ')}`); reps = []; };
+  for (const s of sets) {
+    if (s.weight !== curW) { flush(); curW = s.weight; }
+    reps.push(s.reps ?? '–');
+  }
+  flush();
+  return parts.join('  |  ') || '–';
+}
+
+// ---------- Maschineneinstellungen: Einzeiler ↔ Eingabefeld ----------
+
+function setupRow(entry) {
+  const box = h('div.wk-setup');
+  const draw = () => {
+    box.innerHTML = '';
+    const setup = getExerciseSettings(entry.name).setup || '';
+    const edit = () => {
+      const input = h('input.input', { type: 'text', value: setup, placeholder: 'Sitz 4, Griffhöhe 3, Pin links …', style: { minHeight: '42px', fontSize: '15px' } });
+      const commit = () => { updateExerciseSettings(entry.name, { setup: input.value.trim() }); draw(); };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+      box.innerHTML = '';
+      box.append(h('div.row', { style: { gap: '8px' } }, [h('span.wk-setup-ico', { html: svgIcon.wrench }), input]));
+      setTimeout(() => input.focus(), 30);
+    };
+    box.append(setup
+      ? h('button.wk-setup-line', { onclick: edit }, [h('span.wk-setup-ico', { html: svgIcon.wrench }), h('span.truncate', { text: setup })])
+      : h('button.wk-setup-line.empty', { onclick: edit }, [h('span.wk-setup-ico', { html: svgIcon.wrench }), h('span', { text: 'Maschineneinstellungen merken' })]));
+  };
+  draw();
+  return box;
+}
 
 // ---------- PR-Animation ----------
 

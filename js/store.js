@@ -18,6 +18,9 @@ const DEFAULT_SETTINGS = {
   barWeight: 20,        // Standard-Stangengewicht für den Scheibenrechner
   keepAliveAudio: true, // Pausentimer bei gesperrtem Bildschirm (lautloses Audio)
   warmupSets: true,     // Aufwärmsätze im Training vorschlagen
+  name: '',             // Vorname für die Begrüßung auf dem Startbildschirm
+  lastBackupAt: 0,      // Zeitpunkt der letzten Sicherung (Export)
+  lastBackupSessions: 0, // Anzahl Workouts zum Zeitpunkt der letzten Sicherung (Erinnerung alle 10)
 };
 
 const state = {

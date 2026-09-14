@@ -177,6 +177,14 @@ export function weekKey(ts) {
   return d.getTime();
 }
 
+/** ISO-Kalenderwoche (Montag–Sonntag, Woche 1 enthält den 4. Januar) */
+export function isoWeek(ts) {
+  const d = new Date(ts); d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7)); // Donnerstag der Woche
+  const jan4 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - jan4) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+}
+
 export function normalizeName(name) {
   return String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
@@ -213,18 +221,29 @@ export function toast(msg, opts = {}) {
 
 // ---------- Modal / Bottom Sheet ----------
 
+const openSheets = new Set();
+
 export function openSheet(build) {
   const root = document.getElementById('modal-root');
   const backdrop = h('div.modal-backdrop');
   const sheet = h('div.modal');
-  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+  // Wie bei h(): null/false als Kind ignorieren – DOM.append(null) würde sonst den Text „null“ schreiben
+  const rawAppend = sheet.append.bind(sheet);
+  sheet.append = (...nodes) => rawAppend(...nodes.filter(n => n != null && n !== false));
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); openSheets.delete(close); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
   document.addEventListener('keydown', onKey);
   build(sheet, close);
   backdrop.append(sheet);
   root.append(backdrop);
+  openSheets.add(close);
   return close;
+}
+
+/** Alle offenen Sheets schließen (z.B. bei Seitenwechsel per Zurück-Geste) */
+export function closeAllSheets() {
+  for (const close of [...openSheets]) close();
 }
 
 export function confirmSheet({ title, text, okLabel = 'OK', danger = false }) {

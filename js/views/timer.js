@@ -13,7 +13,7 @@ export function render(root) {
   setWakeLockWanted(true);
   let selected = settings.lastTimerSec || settings.defaultRestSec || 90;
 
-  root.append(h('div.page-head', {}, [h('div', {}, [h('div.eyebrow', { text: 'Hantel' }), h('h1', { text: 'Timer' })])]));
+  root.append(h('div.page-head', {}, [h('div', {}, [h('h1', { text: 'Timer' })])]));
 
   const seg = h('div.seg', {}, [
     h('button', { text: 'Countdown', class: mode === 'countdown' ? 'active' : '', onclick: () => { mode = 'countdown'; draw(); } }),

@@ -161,10 +161,12 @@ export function bodyMapSvg(side, sets, opts = {}) {
   for (const [region, d] of Object.entries(regions)) {
     const muscle = REGION_MUSCLE[region];
     const n = sets?.[muscle] || 0;
-    const color = intensityColor(ratioFor(n, opts.mode));
+    const ratio = ratioFor(n, opts.mode);
+    // mono: Akzentfarbe mit Deckkraft nach Intensität (ruhiger, z.B. für kleine Vorschauen) statt Grün→Rot
+    const color = opts.mono ? (ratio > 0 ? 'var(--accent)' : null) : intensityColor(ratio);
     const sel = opts.selected === muscle ? ' selected' : '';
     // --i steuert die gestaffelte Einblend-Animation („Aufleuchten“)
-    const style = color ? ` style="fill:${color};--i:${idx++}"` : '';
+    const style = color ? ` style="fill:${color};${opts.mono ? `fill-opacity:${(0.45 + 0.55 * Math.min(1, ratio)).toFixed(2)};` : ''}--i:${idx++}"` : '';
     parts.push(`<path class="muscle${color ? ' active' : ''}${sel}" data-muscle="${muscle}" d="${d}"${style}/>`);
     parts.push(`<path class="muscle${color ? ' active' : ''}${sel}" data-muscle="${muscle}" d="${d}"${style} transform="translate(200 0) scale(-1 1)"/>`);
   }

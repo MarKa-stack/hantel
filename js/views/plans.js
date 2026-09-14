@@ -1,5 +1,5 @@
 // Startbildschirm: Dashboard (Heute dran, Wochenring, Serie, letztes PR) + Pläne
-import { h, svg, svgIcon, toast, actionSheet, confirmSheet, promptSheet, relativeDay, fmtDate, illustration, iconBox, fmtNum, weekKey } from '../util.js';
+import { h, svg, svgIcon, toast, actionSheet, confirmSheet, promptSheet, relativeDay, fmtDate, illustration, iconBox, fmtNum, weekKey, isoWeek } from '../util.js';
 import { getPlans, addPlan, newPlan, deletePlan, duplicatePlan, movePlan, getSessions, getActiveWorkout, subscribe, getSettings, sessionVolume } from '../store.js';
 import { sessionPRs, fmtKg } from '../progression.js';
 import { muscleSets, bodyMapSvg } from '../muscles.js';
@@ -15,9 +15,10 @@ export function render(root, { navigate }) {
     const settings = getSettings();
     const hour = new Date().getHours();
     const greeting = hour < 5 ? 'Gute Nacht' : hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Hallo' : 'Guten Abend';
+    const name = (settings.name || '').trim();
 
     root.append(h('div.page-head', {}, [
-      h('div', {}, [h('div.eyebrow', { text: fmtDate(Date.now()) }), h('h1', { text: greeting })]),
+      h('div', {}, [h('div.eyebrow', { text: `${fmtDate(Date.now())} · KW ${isoWeek(Date.now())}` }), h('h1', { text: name ? `${greeting}, ${name}` : greeting })]),
     ]));
 
     // Laufendes Workout
@@ -40,7 +41,7 @@ export function render(root, { navigate }) {
       const nextLast = [...sessions].reverse().find(s => s.planId === nextPlan.id);
       const daysSince = lastSession ? Math.floor((Date.now() - lastSession.startedAt) / 86400000) : null;
       root.append(h('div.hero', {}, [
-        h('div.eyebrow', { html: svgIcon.dumbbell + '<span>Heute dran</span>' }),
+        h('div.eyebrow', { html: svgIcon.calendar + '<span>Heute dran</span>' }),
         h('h2', { text: nextPlan.name }),
         h('div.meta', { text: [
           `${nextPlan.exercises.length} Übungen · ${nextPlan.exercises.reduce((a, e) => a + (e.sets || 0), 0)} Sätze`,
@@ -98,6 +99,7 @@ export function render(root, { navigate }) {
       h('div.row', { style: { gap: '6px' } }, [
         h('button.btn.sm.ghost', { text: 'Vorlagen', onclick: () => navigate('/templates') }),
         h('button.btn.sm.ghost', { text: 'PDF', onclick: () => navigate('/import') }),
+        plans.length ? h('button.btn.sm.ghost.icon', { 'aria-label': 'Plan anlegen', html: svgIcon.plus, onclick: createPlan }) : null,
       ]),
     ]));
 
@@ -129,7 +131,6 @@ export function render(root, { navigate }) {
         list.append(card);
       }
       root.append(list);
-      root.append(h('button.fab', { 'aria-label': 'Plan anlegen', html: svgIcon.plus, onclick: createPlan }));
     }
   };
 
@@ -168,7 +169,7 @@ function planThumb(plan) {
   const upper = ['chest', 'back', 'front_delt', 'side_delt', 'rear_delt', 'biceps', 'triceps'].reduce((a, k) => a + ms.totals[k], 0);
   const lower = ['quads', 'hamstrings', 'glutes', 'calves'].reduce((a, k) => a + ms.totals[k], 0);
   const side = lower > upper ? 'front' : (ms.totals.back > ms.totals.chest ? 'back' : 'front');
-  return h('div.plan-thumb', { html: bodyMapSvg(side, ms.totals, { mode: 'week', still: true }) });
+  return h('div.plan-thumb', { html: bodyMapSvg(side, ms.totals, { mode: 'week', still: true, mono: true }) });
 }
 
 function findLastPR(sessions) {

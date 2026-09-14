@@ -17,7 +17,7 @@ function renderOverview(root, { navigate }) {
   const settings = getSettings();
   const sessions = getSessions();
 
-  root.append(h('div.page-head', {}, [h('div', {}, [h('div.eyebrow', { text: 'Hantel' }), h('h1', { text: 'Fortschritt' })])]));
+  root.append(h('div.page-head', {}, [h('div', {}, [h('h1', { text: 'Fortschritt' })])]));
 
   if (!sessions.length) {
     root.append(h('div.empty', {}, [
@@ -68,7 +68,10 @@ function renderOverview(root, { navigate }) {
 
   // Trainingskalender
   root.append(h('div.subhead', {}, [h('h2', { text: 'Trainingskalender' })]));
-  root.append(h('div.card', {}, [heatmap(sessions, 20, navigate)]));
+  // Kalender wächst mit den Daten: mindestens 8, höchstens 20 Wochen
+  const firstWeek = weekKey(sessions.reduce((a, s) => Math.min(a, s.startedAt), Infinity));
+  const spanWeeks = Math.round((weekKey(Date.now()) - firstWeek) / (7 * 86400000)) + 1;
+  root.append(h('div.card', {}, [heatmap(sessions, Math.min(20, Math.max(8, spanWeeks)), navigate)]));
 
   root.append(h('div.subhead', {}, [h('h2', { text: 'Workouts pro Woche' })]));
   root.append(h('div.card', {}, [weeklyBarChart(sessions, 12, chartWidth(root))]));
@@ -110,7 +113,7 @@ function sessionRow(s, settings, navigate) {
     h('div.date', {}, [h('div.d', { text: d }), h('div.m', { text: m })]),
     h('div.grow', {}, [
       h('div.truncate', { text: s.planName, style: { fontWeight: 600 } }),
-      h('div.meta', { text: `${fmtDurationLong(s.durationSec)} · ${s.entries.length} Übungen · ${sets} Sätze · ${fmtNum(sessionVolume(s))} ${settings.unit}` }),
+      h('div.meta', { text: `${fmtDurationLong(s.durationSec)} · ${sets} Sätze · ${fmtNum(sessionVolume(s))} ${settings.unit}` }),
     ]),
     h('div', { html: svgIcon.chevron }),
   ]);
@@ -143,8 +146,11 @@ function heatmap(sessions, weeks, navigate) {
   }
   const streak = weekStreak(sessions);
   return h('div', {}, [
-    h('div.heatmap-wrap', {}, [grid]),
-    h('div.heatmap-months', {}, months.map(m => h('span', { text: m }))),
+    // Zellen wachsen mit der Breite, aber nicht über ~18 px – sonst wirken wenige Wochen wie Kacheln
+    h('div', { style: { maxWidth: `${weeks * 21}px` } }, [
+      h('div.heatmap-wrap', {}, [grid]),
+      h('div.heatmap-months', {}, months.map(m => h('span', { text: m }))),
+    ]),
     h('div.small.faint', { style: { marginTop: '6px' }, text: `${weeks} Wochen · ${sessions.filter(s => s.startedAt >= start).length} Workouts · Serie: ${streak} Woche${streak === 1 ? '' : 'n'} in Folge` }),
   ]);
 }
@@ -161,7 +167,7 @@ function weekStreak(sessions) {
 // ---------- Übung: Analyse ----------
 
 const METRICS = [
-  ['weight', 'Gewicht'], ['topset', 'Top-Satz'], ['e1rm', 'e1RM'], ['volume', 'Volumen'], ['reps', 'Wdh'],
+  ['weight', 'Gewicht'], ['topset', 'Top'], ['e1rm', 'e1RM'], ['volume', 'Vol.'], ['reps', 'Wdh'],
 ];
 const PERIODS = [['1m', '1 M', 30], ['3m', '3 M', 91], ['6m', '6 M', 182], ['1y', '1 J', 365], ['all', 'Gesamt', Infinity]];
 let exMetric = 'e1rm';
@@ -209,7 +215,8 @@ function renderExercise(root, { params, navigate }) {
     const u = isKg ? unit : 'Wdh';
     if (!pts.length) { chartBox.append(h('p.muted.center', { text: 'Keine Einheiten in diesem Zeitraum.' })); deltaBox.hidden = true; return; }
     deltaBox.hidden = false;
-    chartBox.append(h('div.small.faint', { text: METRICS.find(m => m[0] === exMetric)[1] + (exMetric === 'topset' ? ' (Gewicht des besten Satzes)' : exMetric === 'reps' ? ' (Summe pro Einheit)' : '') }));
+    const captions = { weight: 'Bestes Gewicht', topset: 'Top-Satz (Gewicht des besten Satzes)', e1rm: 'Geschätztes 1RM', volume: 'Volumen pro Einheit', reps: 'Wiederholungen (Summe pro Einheit)' };
+    chartBox.append(h('div.small.faint', { text: captions[exMetric] }));
     chartBox.append(lineChart(pts, {
       width: chartWidth(root),
       unit: u,
@@ -219,17 +226,18 @@ function renderExercise(root, { params, navigate }) {
         `e1RM ${fmtKg(Math.round(p.e1rm))}`,
       ],
     }));
-    // Veränderung im Zeitraum
+    // Veränderung im Zeitraum – erst ab zwei Einheiten sinnvoll
+    if (pts.length < 2) { deltaBox.hidden = true; return; }
     const first = pts[0], last = pts[pts.length - 1];
     const delta = last.y - first.y;
     const pct = first.y ? (delta / first.y) * 100 : 0;
     const spanMs = last.x - first.x;
     const months = Math.round(spanMs / (30.44 * 86400000));
-    const spanTxt = pts.length < 2 ? 'eine Einheit' : months >= 2 ? `${months} Monaten` : `${Math.max(1, Math.round(spanMs / 86400000))} Tagen`;
+    const spanTxt = months >= 2 ? `${months} Monaten` : `${Math.max(1, Math.round(spanMs / 86400000))} Tagen`;
     const fmtV = (v) => isKg ? fmtNum(Math.round(v * 10) / 10) + ' ' + unit : fmtNum(v) + ' Wdh';
     deltaBox.append(h('div.delta-box', {}, [
       h('div.big' + (delta > 0 ? '.up' : delta < 0 ? '.down' : ''), { text: (delta > 0 ? '+' : '') + fmtV(delta) }),
-      h('div.muted', { text: pts.length < 2 ? 'nur eine Einheit im Zeitraum' : `in ${spanTxt}` }),
+      h('div.muted', { text: `in ${spanTxt}` }),
       h('div.grow'),
       h('span.chip-delta' + (delta > 0 ? '' : delta < 0 ? '.down' : '.flat'), { html: (delta > 0 ? svgIcon.arrowUp.replace('class="ico"', 'class="ico sm"') : delta < 0 ? svgIcon.arrowDown.replace('class="ico"', 'class="ico sm"') : '') + '<span>' + (pct > 0 ? '+' : '') + pct.toFixed(1).replace('.', ',') + ' %</span>' }),
     ]));
@@ -251,7 +259,7 @@ function renderExercise(root, { params, navigate }) {
     stat(String(totalSets), 'Arbeitssätze'),
     stat(fmtWeight(maxW, unit), 'Bestes Gewicht'),
     stat(fmtWeight(Math.round(maxRM), unit), 'Bestes e1RM'),
-    stat((lastImprove > 0 ? '+' : '') + fmtWeight(lastImprove, unit), 'Letzte Verbesserung'),
+    stat(points.length > 1 ? (lastImprove > 0 ? '+' : '') + fmtWeight(lastImprove, unit) : '–', 'Letzte Verbesserung'),
     stat(fmtShortDate(hist[hist.length - 1].session.startedAt), 'Zuletzt'),
   ]));
 

@@ -157,12 +157,14 @@ export function prBaseline(name, { extraSets = [], before = Infinity } = {}) {
 export function detectSetPRs(name, set, earlierSets = []) {
   const w = Number(set.weight), r = Number(set.reps);
   if (!w || !r) return [];
+  // Ohne frühere Einheit gibt es nichts zu übertreffen – der allererste Satz ist kein Rekord
+  if (!historyFor(name).length) return [];
   const base = prBaseline(name, { extraSets: earlierSets });
   const rm = e1rm(w, r);
   const out = [];
   const pct = (v, p) => (p ? Math.round(((v - p) / p) * 1000) / 10 : null);
-  if (!base.maxWeight || w > base.maxWeight.value) {
-    out.push({ type: 'weight', value: w, prev: base.maxWeight?.value ?? null, pct: pct(w, base.maxWeight?.value), weight: w, reps: r, e1rm: rm });
+  if (base.maxWeight && w > base.maxWeight.value) {
+    out.push({ type: 'weight', value: w, prev: base.maxWeight.value, pct: pct(w, base.maxWeight.value), weight: w, reps: r, e1rm: rm });
   }
   const raw = base.repsAtWeight.get(w);
   if (raw && r > raw.reps) {
@@ -170,8 +172,6 @@ export function detectSetPRs(name, set, earlierSets = []) {
   }
   if (base.e1rm && rm > base.e1rm.value + 0.05) {
     out.push({ type: 'e1rm', value: rm, prev: base.e1rm.value, pct: pct(rm, base.e1rm.value), weight: w, reps: r, e1rm: rm });
-  } else if (!base.e1rm && !out.some(p => p.type === 'weight')) {
-    // Allererster Satz der Übung überhaupt → kein "Rekord" feiern
   }
   return out;
 }
