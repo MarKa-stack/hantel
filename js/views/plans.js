@@ -5,6 +5,7 @@ import { sessionPRs, fmtKg, plateauedExercises } from '../progression.js';
 import { muscleSets, bodyMapSvg, MUSCLES } from '../muscles.js';
 import { suggestPlan, recoveryStatus, fatigueRatios } from '../recovery.js';
 import { weekStats } from './progress.js';
+import { targets, dayTotals, dateKey, fmtKcal } from '../nutrition.js';
 
 let unsub = null;
 
@@ -88,6 +89,26 @@ export function render(root, { navigate }) {
               toast('Deload-Woche bis Sonntag: −15 % Gewicht, ein Satz weniger');
             } }),
             h('button.btn.sm.ghost', { text: 'Details', onclick: () => navigate('/exercise/' + encodeURIComponent(stuck[0].name)) }),
+          ]),
+        ]));
+      }
+    }
+
+    // Essen heute: Kalorien + Protein gegen das Ziel
+    if (!active) {
+      const t = targets();
+      const tot = dayTotals(dateKey());
+      if (t.ready || tot.kcal > 0) {
+        const pctK = t.ready ? Math.min(100, Math.round((tot.kcal / t.kcal) * 100)) : 0;
+        const pctP = t.ready ? Math.min(100, Math.round((tot.protein / t.protein) * 100)) : 0;
+        root.append(h('div.card.tappable.food-tile', { onclick: () => navigate('/food'), style: { marginBottom: '12px' } }, [
+          h('div.row.between', {}, [
+            h('div.grow', {}, [
+              h('div.title-ico', { html: svgIcon.food + '<b>Essen heute</b>' }),
+              h('div.small.muted', { style: { marginTop: '4px' }, text: t.ready ? `${fmtKcal(tot.kcal)} / ${fmtKcal(t.kcal)} kcal · Protein ${Math.round(tot.protein)} / ${t.protein} g` : `${fmtKcal(tot.kcal)} kcal · ${Math.round(tot.protein)} g Protein` }),
+              t.ready ? h('div.mini-bars', {}, [h('span.track', {}, [h('i.k', { style: { width: pctK + '%' } })]), h('span.track', {}, [h('i.p', { style: { width: pctP + '%' } })])]) : null,
+            ]),
+            h('div', { html: svgIcon.chevron }),
           ]),
         ]));
       }

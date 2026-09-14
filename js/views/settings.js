@@ -6,7 +6,7 @@ import { exportBackup } from '../backup.js';
 import { cloudPush, cloudPull } from '../cloud.js';
 import { exportCSV, exportICS, WEEKDAYS_DE } from '../exporters.js';
 
-export const APP_VERSION = '1.6.0';
+export const APP_VERSION = '1.7.0';
 
 const MODELS = [
   ['claude-opus-5', 'Claude Opus 5 – beste Erkennung (Standard)'],

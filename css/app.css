@@ -1020,3 +1020,49 @@ body:has(.view.wk-view) .pr-toast { top: calc(var(--safe-top) + 88px); }
 
 /* Kopf mit Aktionsbutton rechts (Bibliothek) */
 .page-head .btn.icon { flex: none; }
+
+/* ==================================================================
+   1.7: Essen – Tagebuch, Makros, Lebensmittel, Rezepte
+   ================================================================== */
+.macro-card { padding: 14px; }
+.kcal-ring { position: relative; width: 108px; height: 108px; flex: none; }
+.kcal-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.kcal-ring circle { fill: none; stroke-width: 8; stroke-linecap: round; }
+.kcal-ring .track { stroke: var(--surface-3); }
+.kcal-ring .prog { stroke: var(--accent); transition: stroke-dashoffset 800ms var(--ease); }
+.kcal-ring .prog.over { stroke: var(--danger); }
+.kcal-ring .inner { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.kcal-ring .big { font-family: var(--display); font-size: 24px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+.kcal-ring .sub { font-size: 11px; color: var(--text-3); margin-top: 3px; }
+.macro-bar { margin-bottom: 8px; }
+.macro-bar .lbl { font-size: 12px; color: var(--text-2); font-weight: 600; }
+.macro-bar .mono { font-size: 12px; color: var(--text-3); }
+.macro-bar .track { height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; margin-top: 3px; }
+.macro-bar .track i { display: block; height: 100%; border-radius: 3px; transition: width 600ms var(--ease); }
+.macro-bar .track i.p { background: var(--good); }
+.macro-bar .track i.c { background: #4f8cff; }
+.macro-bar .track i.f { background: var(--warn); }
+.macro-live { font-size: 14px; color: var(--text-2); }
+.macro-live b { color: var(--text); font-family: var(--display); font-size: 16px; }
+
+.meal-card { margin-top: 10px; padding: 12px 14px; }
+.meal-card .meal-title { font-family: var(--display); font-weight: 700; font-size: 16px; }
+.food-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); cursor: pointer; }
+.food-row:first-child, .row.between + .food-row { border-top: 0; }
+.meal-card .food-row:first-of-type { border-top: 0; margin-top: 4px; }
+.food-row .kcal { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+.food-row .pill { flex: none; }
+.food-empty { display: block; width: 100%; text-align: left; background: none; border: 0; color: var(--text-3); font: inherit; font-size: 14px; padding: 8px 0 2px; cursor: pointer; }
+.results .subhead { margin: 14px 0 6px; }
+.results .card { padding: 4px 14px; }
+.results .card .food-row:first-child { border-top: 0; }
+.star { width: 32px; height: 32px; border: 0; background: none; color: var(--text-3); display: inline-flex; align-items: center; justify-content: center; flex: none; cursor: pointer; }
+.star svg { width: 20px; height: 20px; fill: currentColor; }
+.star.on { color: var(--warn); }
+.food-tile .mini-bars { display: flex; gap: 6px; margin-top: 8px; }
+.food-tile .mini-bars .track { flex: 1; height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.food-tile .mini-bars i { display: block; height: 100%; border-radius: 3px; }
+.food-tile .mini-bars i.k { background: var(--accent); }
+.food-tile .mini-bars i.p { background: var(--good); }
+.stepper input.input { border: 0; background: transparent; text-align: center; padding: 0; }
+.tab { font-size: 10.5px; }

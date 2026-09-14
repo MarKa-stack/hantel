@@ -35,6 +35,16 @@ const DEFAULT_SETTINGS = {
   trainingTime: '18:00',
   trainingPlanByDay: {}, // optional fester Plan je Wochentag (für den Kalender)
   milestonesSeen: [],   // bereits gezeigte Meilensteine
+  // Ernährung
+  nHeight: 0,           // cm
+  nAge: 0,
+  nActivity: 1.55,      // PAL: 1.2 sitzend … 1.9 sehr aktiv
+  nGoal: 'gain',        // 'gain' | 'hold' | 'cut'
+  nProteinPerKg: 1.8,
+  nKcalOverride: 0,     // festes Kalorienziel statt Berechnung (0 = berechnen)
+  nAdaptive: true,      // Ziel anhand Gewichtstrend nachjustieren
+  nAdjust: 0,           // kumulierte Anpassung in kcal
+  nLastAdjust: 0,       // Zeitpunkt der letzten Anpassung
 };
 
 /** Einstellungen ohne Geheimnisse (für Export/Cloud) */
@@ -51,6 +61,9 @@ const state = {
   exerciseSettings: {}, // je Übung (normalisierter Name): { setup, barWeight }
   body: [],             // Körpergewicht/Maße: { id, date, weight, waist, chest, arm, thigh, note }
   customExercises: [],  // eigene Übungen: { id, name, primary, secondary, weightStep, barbell, tips, aliases }
+  foods: [],            // Lebensmittel: { id, name, brand, source, per100:{kcal,protein,carbs,fat}, unit, portions:[{label,grams}], barcode, favorite, uses, lastUsed }
+  recipes: [],          // Rezepte: { id, name, servings, items:[{ foodId, name, grams, per100 }], note }
+  diary: {},            // Tagebuch: { "YYYY-MM-DD": [{ id, meal, kind, refId, name, grams, servings, kcal, protein, carbs, fat, at }] }
 };
 
 const listeners = new Set();
@@ -72,6 +85,9 @@ export function load() {
       state.exerciseSettings = data.exerciseSettings || {};
       state.body = data.body || [];
       state.customExercises = data.customExercises || [];
+      state.foods = data.foods || [];
+      state.recipes = data.recipes || [];
+      state.diary = data.diary || {};
     }
   } catch (e) {
     console.error('Konnte Daten nicht laden', e);
@@ -91,6 +107,9 @@ export function save(immediate = false) {
         exerciseSettings: state.exerciseSettings,
         body: state.body,
         customExercises: state.customExercises,
+        foods: state.foods,
+        recipes: state.recipes,
+        diary: state.diary,
         savedAt: Date.now(),
       }));
     } catch (e) {
@@ -422,6 +441,9 @@ export function exportJSON() {
     exerciseSettings: state.exerciseSettings,
     body: state.body,
     customExercises: state.customExercises,
+    foods: state.foods,
+    recipes: state.recipes,
+    diary: state.diary,
   }, null, 2);
 }
 
@@ -453,8 +475,20 @@ export function importJSON(text, { merge = true } = {}) {
     const ids = new Set(state.customExercises.map(c => c.id));
     for (const c of data.customExercises) if (!ids.has(c.id)) state.customExercises.push(c);
   }
+  for (const key of ["foods", "recipes"]) {
+    if (!Array.isArray(data[key])) continue;
+    const ids = new Set(state[key].map(x => x.id));
+    for (const x of data[key]) if (!ids.has(x.id)) state[key].push(x);
+  }
+  if (data.diary && typeof data.diary === "object") {
+    for (const [day, list] of Object.entries(data.diary)) {
+      const cur = state.diary[day] = state.diary[day] || [];
+      const ids = new Set(cur.map(e => e.id));
+      for (const e of list) if (!ids.has(e.id)) cur.push(e);
+    }
+  }
   save(true);
-  emit('plans'); emit('sessions'); emit('settings'); emit('body'); emit('custom');
+  emit('plans'); emit('sessions'); emit('settings'); emit('body'); emit('custom'); emit('nutrition');
   return { plans, sessions };
 }
 
@@ -483,7 +517,92 @@ export function resetAll() {
   state.exerciseSettings = {};
   state.body = [];
   state.customExercises = [];
+  state.foods = []; state.recipes = []; state.diary = {};
   state.settings = { ...DEFAULT_SETTINGS };
   save(true);
   emit('plans'); emit('sessions'); emit('settings'); emit('workout');
+}
+
+// ---------- Ernährung: Lebensmittel, Rezepte, Tagebuch ----------
+
+export function getFoods() { return state.foods; }
+export function getFood(id) { return state.foods.find(f => f.id === id) || null; }
+
+export function saveFood(food) {
+  const i = state.foods.findIndex(f => f.id === food.id);
+  if (i >= 0) state.foods[i] = { ...state.foods[i], ...food };
+  else { food.id = food.id || uid(); food.createdAt = Date.now(); state.foods.push(food); }
+  save();
+  emit('nutrition');
+  return i >= 0 ? state.foods[i] : food;
+}
+
+export function deleteFood(id) {
+  state.foods = state.foods.filter(f => f.id !== id);
+  save();
+  emit('nutrition');
+}
+
+/** Nutzung zählen (für „Zuletzt“/Ranking) */
+export function touchFood(id) {
+  const f = getFood(id);
+  if (!f) return;
+  f.uses = (f.uses || 0) + 1;
+  f.lastUsed = Date.now();
+  save();
+}
+
+export function getRecipes() { return state.recipes; }
+export function getRecipe(id) { return state.recipes.find(r => r.id === id) || null; }
+
+export function saveRecipe(recipe) {
+  const i = state.recipes.findIndex(r => r.id === recipe.id);
+  if (i >= 0) state.recipes[i] = { ...state.recipes[i], ...recipe, updatedAt: Date.now() };
+  else { recipe.id = recipe.id || uid(); recipe.createdAt = Date.now(); state.recipes.push(recipe); }
+  save();
+  emit('nutrition');
+  return i >= 0 ? state.recipes[i] : recipe;
+}
+
+export function deleteRecipe(id) {
+  state.recipes = state.recipes.filter(r => r.id !== id);
+  save();
+  emit('nutrition');
+}
+
+export function getDiary() { return state.diary; }
+export function getDay(key) { return state.diary[key] || []; }
+
+export function addDiaryEntry(key, entry) {
+  const e = { id: uid(), at: Date.now(), ...entry };
+  (state.diary[key] = state.diary[key] || []).push(e);
+  save();
+  emit('nutrition');
+  return e;
+}
+
+export function updateDiaryEntry(key, id, patch) {
+  const list = state.diary[key] || [];
+  const e = list.find(x => x.id === id);
+  if (!e) return null;
+  Object.assign(e, patch);
+  save();
+  emit('nutrition');
+  return e;
+}
+
+export function deleteDiaryEntry(key, id) {
+  state.diary[key] = (state.diary[key] || []).filter(x => x.id !== id);
+  if (!state.diary[key].length) delete state.diary[key];
+  save();
+  emit('nutrition');
+}
+
+/** Einträge eines Tages (optional nur eine Mahlzeit) auf einen anderen Tag kopieren */
+export function copyDiaryDay(fromKey, toKey, meal = null) {
+  const src = (state.diary[fromKey] || []).filter(e => !meal || e.meal === meal);
+  for (const e of src) (state.diary[toKey] = state.diary[toKey] || []).push({ ...e, id: uid(), at: Date.now() });
+  save();
+  emit('nutrition');
+  return src.length;
 }

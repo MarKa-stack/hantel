@@ -13,6 +13,7 @@ import * as progress from './views/progress.js';
 import * as settings from './views/settings.js';
 import * as library from './views/library.js';
 import * as body from './views/body.js';
+import * as food from './views/food.js';
 import { seedTemplates } from './templates.js';
 import { startAutoSync } from './cloud.js';
 import { suggestPlan } from './recovery.js';
@@ -31,6 +32,11 @@ const routes = [
   { re: /^\/week\/(\d+)$/, view: progress, sub: 'week', tab: 'progress' },
   { re: /^\/milestones$/, view: progress, sub: 'milestones', tab: 'progress' },
   { re: /^\/body$/, view: body, tab: 'progress' },
+  { re: /^\/food$/, view: food, tab: 'food' },
+  { re: /^\/food\/recipes$/, view: food, sub: 'recipes', tab: 'food' },
+  { re: /^\/food\/recipe\/([^/]+)$/, view: food, sub: 'recipe', tab: 'food' },
+  { re: /^\/food\/foods$/, view: food, sub: 'foods', tab: 'food' },
+  { re: /^\/food\/goals$/, view: food, sub: 'goals', tab: 'food' },
   { re: /^\/settings$/, view: settings, tab: 'settings' },
   { re: /^\/library$/, view: library, tab: 'settings' },
   { re: /^\/templates$/, view: library, sub: 'templates', tab: 'plans' },
@@ -88,7 +94,7 @@ function render() {
   viewEl.classList.add('enter-' + kind);
 }
 
-const ROOTS = new Set(['/plans', '/progress', '/timer', '/settings']);
+const ROOTS = new Set(['/plans', '/progress', '/food', '/timer', '/settings']);
 
 // ---------- Theme ----------
 const mqDark = window.matchMedia('(prefers-color-scheme: dark)');
