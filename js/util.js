@@ -80,6 +80,12 @@ export const svgIcon = {
   arrowUp: '<svg class="ico" viewBox="0 0 24 24"><path d="M7 14l5-5 5 5z"/></svg>',
   arrowDown: '<svg class="ico" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>',
   checkDraw: '<svg class="check-draw" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7" pathLength="1"/></svg>',
+  share: '<svg class="ico" viewBox="0 0 24 24"><path d="M12 2l4.5 4.5-1.4 1.4L13 5.8V15h-2V5.8L8.9 7.9 7.5 6.5 12 2zM5 10h4v2H7v8h10v-8h-2v-2h4v12H5V10z"/></svg>',
+  cloud: '<svg class="ico" viewBox="0 0 24 24"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h.71C7.37 7.69 9.48 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3s-1.34 3-3 3z"/></svg>',
+  moon: '<svg class="ico" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>',
+  note: '<svg class="ico" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zm17.7-10.2a1 1 0 0 0 0-1.4l-2.35-2.35a1 1 0 0 0-1.4 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>',
+  speaker: '<svg class="ico" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>',
+  medal: '<svg class="ico" viewBox="0 0 24 24"><path d="M12 2L9 8l-6 .5 4.5 4L6 19l6-3.5 6 3.5-1.5-6.5 4.5-4L15 8l-3-6zm0 4.6l1.7 3.4 3.7.3-2.8 2.5.9 3.7-3.5-2-3.5 2 .9-3.7-2.8-2.5 3.7-.3L12 6.6z"/></svg>',
 };
 
 /** Icon-Kachel (farbiger Kasten mit Icon) */

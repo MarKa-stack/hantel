@@ -194,6 +194,7 @@ class Countdown {
     if (whole !== this.lastWhole) {
       this.lastWhole = whole;
       if (whole > 0 && whole <= 3) playTick();
+      if (whole === 10) this._emit('warn');
       this._emit('tick');
     }
     if (rem <= 0) {

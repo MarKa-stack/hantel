@@ -1,8 +1,10 @@
 // Startbildschirm: Dashboard (Heute dran, Wochenring, Serie, letztes PR) + Pläne
 import { h, svg, svgIcon, toast, actionSheet, confirmSheet, promptSheet, relativeDay, fmtDate, illustration, iconBox, fmtNum, weekKey, isoWeek } from '../util.js';
-import { getPlans, addPlan, newPlan, deletePlan, duplicatePlan, movePlan, getSessions, getActiveWorkout, subscribe, getSettings, sessionVolume } from '../store.js';
-import { sessionPRs, fmtKg } from '../progression.js';
-import { muscleSets, bodyMapSvg } from '../muscles.js';
+import { getPlans, addPlan, newPlan, deletePlan, duplicatePlan, movePlan, getSessions, getActiveWorkout, subscribe, getSettings, updateSettings, sessionVolume, deloadActive } from '../store.js';
+import { sessionPRs, fmtKg, plateauedExercises } from '../progression.js';
+import { muscleSets, bodyMapSvg, MUSCLES } from '../muscles.js';
+import { suggestPlan, recoveryStatus, fatigueRatios } from '../recovery.js';
+import { weekStats } from './progress.js';
 
 let unsub = null;
 
@@ -33,23 +35,83 @@ export function render(root, { navigate }) {
       ]));
     }
 
-    // Heute dran
+    // Heute dran – nach Erholungsstatus der Muskeln, nicht nur nach Rotation
     if (!active && plans.length) {
-      const lastSession = sessions[sessions.length - 1];
-      const lastIdx = lastSession ? plans.findIndex(p => p.id === lastSession.planId) : -1;
-      const nextPlan = plans[(lastIdx + 1) % plans.length];
+      const sug = suggestPlan();
+      const nextPlan = sug.plan;
       const nextLast = [...sessions].reverse().find(s => s.planId === nextPlan.id);
-      const daysSince = lastSession ? Math.floor((Date.now() - lastSession.startedAt) / 86400000) : null;
+      const deload = settings.deloadUntil && settings.deloadUntil > Date.now();
       root.append(h('div.hero', {}, [
-        h('div.eyebrow', { html: svgIcon.calendar + '<span>Heute dran</span>' }),
+        h('div.eyebrow', { html: svgIcon.calendar + `<span>${deload ? 'Deload-Woche · Heute dran' : 'Heute dran'}</span>` }),
         h('h2', { text: nextPlan.name }),
         h('div.meta', { text: [
           `${nextPlan.exercises.length} Übungen · ${nextPlan.exercises.reduce((a, e) => a + (e.sets || 0), 0)} Sätze`,
           nextLast ? `zuletzt ${lc(relativeDay(nextLast.startedAt))}` : 'noch nie trainiert',
-          lastSession ? `letztes Training ${daysSince === 0 ? 'heute' : daysSince === 1 ? 'gestern' : `vor ${daysSince} Tagen`}` : null,
-        ].filter(Boolean).join(' · ') }),
+        ].join(' · ') }),
+        sessions.length ? h('div.meta.reason', { text: sug.reason }) : null,
         h('button.btn.primary.block', { html: svgIcon.play + '<span>Training starten</span>', onclick: () => navigate('/plan/' + nextPlan.id + '?start=1') }),
+        sug.rotationNext.id !== nextPlan.id
+          ? h('button.btn.sm.ghost.block', { text: `Lieber ${sug.rotationNext.name} (nächster laut Reihenfolge)`, style: { marginTop: '8px' }, onclick: () => navigate('/plan/' + sug.rotationNext.id + '?start=1') })
+          : null,
       ]));
+    }
+
+    // Erholungsstatus der Muskeln
+    if (!active && sessions.length) {
+      const status = recoveryStatus();
+      const ratios = fatigueRatios(status);
+      const tired = MUSCLES.filter(([k]) => status[k].state === 'tired').map(([, n]) => n);
+      const fresh = MUSCLES.filter(([k]) => status[k].state === 'fresh' && status[k].lastAt).map(([, n]) => n);
+      root.append(h('div.card.tappable.recovery', { onclick: () => navigate('/muscles') }, [
+        h('div.row', { style: { gap: '12px', alignItems: 'center' } }, [
+          h('div.recovery-maps', { html: bodyMapSvg('front', null, { ratios, mono: true, still: true }) + bodyMapSvg('back', null, { ratios, mono: true, still: true }) }),
+          h('div.grow', {}, [
+            h('div.title-ico', { html: svgIcon.body + '<b>Erholung</b>' }),
+            h('div.small.muted', { style: { marginTop: '4px' }, text: tired.length ? `Noch müde: ${tired.join(', ')}` : 'Alle Muskelgruppen erholt.' }),
+            fresh.length && tired.length ? h('div.small.faint', { text: `Erholt: ${fresh.slice(0, 4).join(', ')}${fresh.length > 4 ? ' …' : ''}` }) : null,
+          ]),
+          h('div', { html: svgIcon.chevron }),
+        ]),
+      ]));
+    }
+
+    // Mehrere Übungen stagnieren → Deload-Woche anbieten
+    if (!active && sessions.length && !deloadActive()) {
+      const stuck = plateauedExercises();
+      if (stuck.length >= 3) {
+        root.append(h('div.card.alert-card', { style: { marginBottom: '12px' } }, [
+          h('div.title-ico', { html: svgIcon.warning + `<b>${stuck.length} Übungen stagnieren</b>` }),
+          h('div.small.muted', { style: { marginTop: '4px' }, text: stuck.slice(0, 3).map(p => p.name).join(', ') + (stuck.length > 3 ? ' …' : '') + ' – seit mehreren Wochen kein neues Bestes.' }),
+          h('div.row', { style: { gap: '8px', marginTop: '10px' } }, [
+            h('button.btn.sm.primary', { text: 'Deload-Woche starten', onclick: () => {
+              updateSettings({ deloadUntil: weekKey(Date.now()) + 7 * 86400000 - 1 });
+              toast('Deload-Woche bis Sonntag: −15 % Gewicht, ein Satz weniger');
+            } }),
+            h('button.btn.sm.ghost', { text: 'Details', onclick: () => navigate('/exercise/' + encodeURIComponent(stuck[0].name)) }),
+          ]),
+        ]));
+      }
+    }
+
+    // Wochenrückblick: Montag bis Mittwoch (oder bis zum ersten Training der neuen Woche)
+    if (!active && sessions.length) {
+      const thisWk = weekKey(Date.now()), lastWk = thisWk - 7 * 86400000;
+      const dow = (new Date().getDay() + 6) % 7; // Mo = 0
+      const last = weekStats(sessions, lastWk);
+      const thisN = sessions.filter(s => weekKey(s.startedAt) === thisWk).length;
+      if (last.list.length && (dow <= 2 || thisN === 0)) {
+        const prev = weekStats(sessions, lastWk - 7 * 86400000);
+        const dVol = last.volume - prev.volume;
+        root.append(h('div.card.tappable.review', { onclick: () => navigate('/week/' + lastWk), style: { marginBottom: '12px' } }, [
+          h('div.row.between', {}, [
+            h('div.grow', {}, [
+              h('div.title-ico', { html: svgIcon.calendar + `<b>Deine Woche · KW ${isoWeek(lastWk)}</b>` }),
+              h('div.small.muted', { style: { marginTop: '4px' }, text: `${last.list.length} Training${last.list.length === 1 ? '' : 's'} · ${fmtNum(last.volume)} ${settings.unit}` + (prev.list.length ? ` (${dVol >= 0 ? '+' : ''}${fmtNum(dVol)})` : '') + ` · ${last.prs.length} PR${last.prs.length === 1 ? '' : 's'}` }),
+            ]),
+            h('div', { html: svgIcon.chevron }),
+          ]),
+        ]));
+      }
     }
 
     // Kacheln: Wochenring, Serie, letztes PR

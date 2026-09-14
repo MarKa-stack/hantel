@@ -20,6 +20,22 @@ Kein Build-Schritt, kein Backend – reines HTML/CSS/JavaScript, Daten bleiben a
 - **Übungsbibliothek**: animierte Strichfiguren (Start ↔ Endposition) mit Muskelgruppen und 2–3 Ausführungstipps zu 25 Übungen – im Plan, im Workout (ⓘ) und unter „Mehr“
 - **Vorlagen**: Oberkörper/Unterkörper A+B (4-/5-Tage-Split) werden beim ersten Start angelegt; Zusatztag Samstag optional
 - **Backup**: JSON-Export/-Import unter „Mehr“; alle 10 Workouts erinnert die App an eine Sicherung, `navigator.storage.persist()` wird beim Start angefragt
+- **Cloud-Backup**: privates GitHub-Gist (Token mit Scope „gist“ unter „Mehr“), automatisch nach Workouts/Plan-/Körperänderungen, Wiederherstellen auf neuem Gerät per Token (`js/cloud.js`)
+- **Erholung & Planvorschlag**: Ermüdung je Muskelgruppe (Satz-Äquivalente, Halbwertszeit 24 h) → „Heute dran“ nimmt den Plan mit den erholtesten Muskeln, Erholungskarte auf dem Start (`js/recovery.js`)
+- **Workout-Karte teilen**: Canvas-Bild (1080×1350) mit Kennzahlen, Körperkarte, Rekorden → Share-Sheet oder PNG (`js/share.js`)
+- **Plateau & Deload**: Stagnation je Übung (≥ 4 Einheiten/3 Wochen ohne neues e1RM) mit Deload-Knopf im Training (−15 %, ein Satz weniger) und Plateau-Karte auf der Übungsseite; Deload-Woche global unter „Mehr“ (Progression ignoriert Deload-Einheiten)
+- **Volumen-Ziel**: min–max Sätze je Muskel/Woche (Einstellung) – Zielband in den Balken, Status ✓/↓/↑, Körperkarte skaliert auf das Ziel
+- **Satztypen**: Arbeit / Drop (zählt nicht für die Progression) / AMRAP / Failure je Satz; „Letzter Satz AMRAP“ im Plan-Editor
+- **Kraftstandards**: e1RM ÷ Körpergewicht → Einsteiger … Elite mit Fortschrittsbalken (Bankdrücken, Kniebeuge, Kreuzheben, Presse, Latzug u.a.; Mann/Frau)
+- **Pausen-Vorschau**: nach dem letzten Satz zeigt der Pausenring die nächste Übung samt Maschineneinstellungen
+- **Wochenrückblick**: `#/week/<ts>` mit Vorwochenvergleich, Muskeln, Rekorden; Karte auf dem Start Mo–Mi
+- **Meilensteine**: 23 aus dem Verlauf berechnete Marken (Workouts, Serien, Volumen, Rekorde, 100 kg …), Toast nach dem Workout, Seite `#/milestones` (`js/milestones.js`)
+- **Sprachansagen**: „Noch zehn Sekunden“, „Pause vorbei. Satz 2: 60 Kilo, 6 Wiederholungen“ (Web Speech API, Schalter unter „Mehr“)
+- **Notiz je Übung** in der Session (Stift-Button), erscheint beim nächsten Mal unter „Zuletzt“
+- **Siri-Kurzbefehl**: `?action=start` startet das heutige Training, `?action=timer` den Timer
+- **Kalender**: Trainingstage + Uhrzeit (+ optional Plan je Tag) als .ics mit Erinnerung, per Share-Sheet in den Apple-Kalender
+- **CSV-Export** aller Sätze (Semikolon, BOM – Excel/Numbers)
+- **Eigene Übungen**: Name, Aliase, Primär-/Sekundärmuskeln, Gewichtsschritt, Langhantel, Tipps – zählen in Bilanz, Erholung, Progression und Scheibenrechner (`js/views/custom-exercise.js`)
 - **Premium-Details**: Dashboard mit Wochenring/Serie/letztem PR, Display-Schrift (Space Grotesk) für Titel und Zahlen, eigenes SVG-Icon-Set, Seitenübergänge und Mikro-Animationen (Haken zeichnet sich, Einrasten, Count-up, aufleuchtende Muskelkarte; `prefers-reduced-motion` wird respektiert), fokussierter Workout-Screen (kompakter Kopf, nur der aktuelle Satz groß, Pausenring inline, Auto-Scroll zum Ring), Begrüßung mit Namen (unter „Mehr“), iOS-Splash-Screens, Haptik über switch-Checkbox (iOS 17.4+)
 - **Offline** dank Service Worker; Dark ist Standard, Hell/Auto unter „Mehr“
 
@@ -58,6 +74,13 @@ js/app.js             Router, Start, SW-Registrierung
 js/store.js           State + localStorage, Statistik-Helfer
 js/timer.js           Countdown/Stoppuhr, Ton, Wake Lock
 js/backup.js          Sicherung exportieren + Erinnerung
+js/cloud.js           Cloud-Backup über GitHub-Gist (Auto-Sync)
+js/recovery.js        Erholungsstatus je Muskel, Planvorschlag
+js/share.js           Teilbare Workout-Karte (Canvas)
+js/milestones.js      Meilensteine
+js/standards.js       Kraftstandards
+js/speech.js          Sprachansagen
+js/exporters.js       CSV + ICS
 js/pdf-import.js      pdf.js-Textextraktion + Mustererkennung
 js/ai-import.js       Claude-API-Aufruf (PDF → JSON)
 js/figure.js          Strichfiguren-Renderer (Posen über Gelenkwinkel, SMIL-Animation)
@@ -74,9 +97,12 @@ icons/                App-Icons (PNG via tools/make-icons.ps1)
 ```
 plan     { id, name, note, exercises: [{ id, name, sets, reps, weight, restSec, note }] }
 session  { id, planId, planName, startedAt, endedAt, durationSec, note,
-           entries: [{ exerciseId, name, sets: [{ reps, weight, done }] }] }
+           entries: [{ exerciseId, name, sessionNote, sets: [{ reps, weight, done, rir, type }] }], deload }
 settings { defaultRestSec, autoRestTimer, sound, vibrate, wakeLock, unit, apiKey, aiModel, theme, weeklyGoal,
-           barWeight, keepAliveAudio, warmupSets, name, lastBackupAt, lastBackupSessions }
+           barWeight, keepAliveAudio, warmupSets, name, lastBackupAt, lastBackupSessions,
+           gistToken, gistId, cloudAutoSync, deloadUntil, volumeMin, volumeMax, sex, speech,
+           trainingDays, trainingTime, trainingPlanByDay, milestonesSeen }
+customExercises [{ id, name, aliases, primary, secondary, weightStep, barbell, tips }]
 ```
 
 Übungen werden über ihren Namen (case-insensitiv) über Pläne hinweg zusammengeführt – so zählt

@@ -1,5 +1,5 @@
 // Double Progression, Gewichtsschritte und PR-Erkennung
-import { getSessions, e1rm, setVolume } from './store.js';
+import { getSessions, e1rm, setVolume, getCustomExercises } from './store.js';
 import { normalizeName } from './util.js';
 
 // ---------- Wiederholungsbereich & Gewichtsschritt ----------
@@ -22,7 +22,11 @@ export function inferWeightStep(name) {
 
 export function weightStepFor(exercise) {
   const s = Number(exercise?.weightStep);
-  return s > 0 ? s : inferWeightStep(exercise?.name || '');
+  if (s > 0) return s;
+  // eigene Übung mit hinterlegtem Schritt?
+  const c = getCustomExercises().find(x => normalizeName(x.name) === normalizeName(exercise?.name || ''));
+  if (c && Number(c.weightStep) > 0) return Number(c.weightStep);
+  return inferWeightStep(exercise?.name || '');
 }
 
 export function roundToStep(w, step) {
@@ -38,16 +42,22 @@ export function fmtKg(w) {
 
 // ---------- Verlauf einer Übung ----------
 
-/** Alle Sessions mit Sätzen dieser Übung, chronologisch (älteste zuerst) */
-export function historyFor(name, { before = Infinity } = {}) {
+/** Alle Sessions mit Sätzen dieser Übung, chronologisch (älteste zuerst); Deload-Einheiten optional ausblenden */
+export function historyFor(name, { before = Infinity, skipDeload = false } = {}) {
   const key = normalizeName(name);
   const out = [];
   for (const s of getSessions()) {
     if (s.startedAt >= before) continue;
+    if (skipDeload && s.deload) continue;
     const e = s.entries.find(x => normalizeName(x.name) === key);
     if (e && e.sets.length) out.push({ session: s, entry: e });
   }
   return out;
+}
+
+/** Arbeitssätze einer Einheit (ohne Drop-Sätze) */
+export function workSets(entry) {
+  return entry.sets.filter(s => s.type !== 'drop');
 }
 
 /** Arbeitsgewicht einer Einheit: das Gewicht, mit dem die meisten Sätze gemacht wurden (bei Gleichstand das höhere) */
@@ -73,7 +83,8 @@ export function workingWeight(entry) {
 export function recommend(exercise, opts = {}) {
   const range = repsRange(exercise.reps);
   const step = weightStepFor(exercise);
-  const hist = historyFor(exercise.name, opts);
+  // Deload-Einheiten sind bewusst leichter und zählen für die Progression nicht
+  const hist = historyFor(exercise.name, { ...opts, skipDeload: true });
   const last = hist[hist.length - 1] || null;
 
   if (!last) {
@@ -83,13 +94,14 @@ export function recommend(exercise, opts = {}) {
     };
   }
 
-  const w = workingWeight(last.entry);
-  const setsAtW = last.entry.sets.filter(s => Number(s.weight) === w);
+  const lastSets = workSets(last.entry);
+  const w = workingWeight({ sets: lastSets });
+  const setsAtW = lastSets.filter(s => Number(s.weight) === w);
   const targetSets = Math.max(1, exercise.sets || 1);
 
   // Leistungsabfall gegenüber dem bisherigen Niveau (bestes e1RM davor)?
-  const lastBest = Math.max(0, ...last.entry.sets.map(s => e1rm(s.weight, s.reps)));
-  const prevBest = Math.max(0, ...hist.slice(0, -1).flatMap(h => h.entry.sets.map(s => e1rm(s.weight, s.reps))));
+  const lastBest = Math.max(0, ...lastSets.map(s => e1rm(s.weight, s.reps)));
+  const prevBest = Math.max(0, ...hist.slice(0, -1).flatMap(h => workSets(h.entry).map(s => e1rm(s.weight, s.reps))));
   const decline = prevBest > 0 && lastBest < prevBest * 0.92;
 
   if (w == null || !range) {
@@ -119,6 +131,43 @@ export function recommend(exercise, opts = {}) {
       ? `${fmtKg(w)} beibehalten – erst alle Sätze in den Zielbereich (${range.min}–${range.max}) bringen.`
       : `${fmtKg(w)} beibehalten und versuchen, die Wiederholungen zu steigern (Ziel: alle Sätze × ${range.max}).`,
   };
+}
+
+// ---------- Plateau & Deload ----------
+
+/**
+ * Stagnation: seit mindestens 4 Einheiten und 3 Wochen kein neues bestes e1RM.
+ * @returns {{ sessions:number, since:number, bestE1rm:number, weight:number|null, grinding:boolean }|null}
+ */
+export function plateauFor(name) {
+  const hist = historyFor(name, { skipDeload: true });
+  if (hist.length < 4) return null;
+  let best = 0, bestIdx = 0;
+  hist.forEach(({ entry }, i) => {
+    const rm = Math.max(0, ...workSets(entry).map(s => e1rm(s.weight, s.reps)));
+    if (rm > best + 0.05) { best = rm; bestIdx = i; }
+  });
+  const stale = hist.length - 1 - bestIdx;
+  const days = (Date.now() - hist[bestIdx].session.startedAt) / 86400000;
+  if (stale < 4 || days < 21) return null;
+  // „Grinding“: die letzten zwei Einheiten durchgehend mit RIR 0 protokolliert
+  const grinding = hist.slice(-2).every(({ entry }) => workSets(entry).length && workSets(entry).every(s => s.rir === 0));
+  return { sessions: stale, since: hist[bestIdx].session.startedAt, bestE1rm: best, weight: workingWeight(hist[hist.length - 1].entry), grinding };
+}
+
+/** Deload-Vorgabe: −15 % Gewicht (auf den Schritt gerundet), ein Satz weniger */
+export function deloadFor(weight, step = 2.5, sets = 3) {
+  const w = weight != null ? Math.max(step, roundToStep(Number(weight) * 0.85, step)) : null;
+  return { weight: w, sets: Math.max(1, (sets || 1) - 1) };
+}
+
+/** Alle je trainierten Übungen, die gerade stagnieren */
+export function plateauedExercises() {
+  const seen = new Map();
+  for (const s of getSessions()) for (const e of s.entries) if (e.sets.length) seen.set(normalizeName(e.name), e.name);
+  const out = [];
+  for (const name of seen.values()) { const p = plateauFor(name); if (p) out.push({ name, ...p }); }
+  return out;
 }
 
 // ---------- Persönliche Rekorde ----------

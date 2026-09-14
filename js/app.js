@@ -14,6 +14,8 @@ import * as settings from './views/settings.js';
 import * as library from './views/library.js';
 import * as body from './views/body.js';
 import { seedTemplates } from './templates.js';
+import { startAutoSync } from './cloud.js';
+import { suggestPlan } from './recovery.js';
 
 const routes = [
   { re: /^\/plans$/, view: plans, tab: 'plans' },
@@ -26,6 +28,8 @@ const routes = [
   { re: /^\/exercise\/(.+)$/, view: progress, sub: 'exercise', tab: 'progress' },
   { re: /^\/session\/([^/]+)$/, view: progress, sub: 'session', tab: 'progress' },
   { re: /^\/muscles$/, view: progress, sub: 'muscles', tab: 'progress' },
+  { re: /^\/week\/(\d+)$/, view: progress, sub: 'week', tab: 'progress' },
+  { re: /^\/milestones$/, view: progress, sub: 'milestones', tab: 'progress' },
   { re: /^\/body$/, view: body, tab: 'progress' },
   { re: /^\/settings$/, view: settings, tab: 'settings' },
   { re: /^\/library$/, view: library, tab: 'settings' },
@@ -103,9 +107,20 @@ window.addEventListener('hashchange', render);
 load();
 applyTheme();
 const seeded = seedTemplates();
+// Deep-Link für Siri-Kurzbefehle: …/?action=start startet das heutige Training, ?action=timer öffnet den Timer
+const action = new URLSearchParams(location.search).get('action');
+if (action) {
+  let target = location.hash;
+  if (action === 'start') {
+    const sug = suggestPlan();
+    target = getActiveWorkout() ? '#/workout' : sug ? '#/plan/' + sug.plan.id + '?start=1' : '#/plans';
+  } else if (action === 'timer') target = '#/timer';
+  history.replaceState(null, '', location.pathname + target); // ohne hashchange, render() folgt direkt
+}
 render();
 // Safari darf Site-Daten nach 7 Tagen ohne Nutzung löschen – „persistent“ anfragen (still, ohne Dialog)
 navigator.storage?.persist?.().catch(() => {});
+startAutoSync();
 if (seeded) toast(`${seeded} Trainingspläne angelegt: Oberkörper & Unterkörper A/B`, { duration: 5000 });
 
 // Laufendes Workout beim Start wieder öffnen

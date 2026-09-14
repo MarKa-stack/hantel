@@ -1,15 +1,24 @@
 // Trainingsmodus: eine Übung pro Seite, große Stepper, letztes Training + Empfehlung, PR-Erkennung
-import { h, svgIcon, fmtDuration, fmtNum, fmtShortDate, confirmSheet, openSheet, toast, haptic, parseNum, countUp } from '../util.js';
-import { getActiveWorkout, touchWorkout, finishWorkout, cancelWorkout, getSettings, sessionVolume, getExerciseSettings, updateExerciseSettings } from '../store.js';
+import { h, svgIcon, fmtDuration, fmtNum, fmtShortDate, confirmSheet, openSheet, promptSheet, actionSheet, toast, haptic, parseNum, countUp, escapeHtml } from '../util.js';
+import { getActiveWorkout, touchWorkout, finishWorkout, cancelWorkout, getSettings, sessionVolume, getExerciseSettings, updateExerciseSettings, getSessions } from '../store.js';
 import { restTimer, unlockAudio, keepAlive, setWakeLockWanted } from '../timer.js';
-import { recommend, detectSetPRs, sessionPRs, fmtKg, PR_LABELS, warmupSets, platesFor } from '../progression.js';
+import { speak, sayWeightReps, primeSpeech } from '../speech.js';
+import { recommend, detectSetPRs, sessionPRs, fmtKg, PR_LABELS, warmupSets, platesFor, plateauFor, deloadFor } from '../progression.js';
 import { findExercise, EXERCISES } from '../exercise-db.js';
-import { muscleSets, bodyMapSvg, MUSCLE_NAME, musclesFor } from '../muscles.js';
+import { muscleSets, bodyMapSvg, MUSCLE_NAME, musclesFor, findCustomExercise } from '../muscles.js';
 import { openExerciseInfo, figureThumb } from './exercise-info.js';
 import { backupDue, exportBackup } from '../backup.js';
+import { newMilestones } from '../milestones.js';
 
 let cleanup = [];
 let rootEl = null;
+
+export const SET_TYPES = {
+  work: { short: 'Arbeit', label: 'Arbeitssatz', desc: 'normaler Satz im Zielbereich' },
+  drop: { short: 'Drop', label: 'Drop-Satz', desc: 'direkt im Anschluss mit weniger Gewicht; zählt fürs Volumen, nicht für die Progression' },
+  amrap: { short: 'AMRAP', label: 'AMRAP', desc: 'so viele Wiederholungen wie möglich – liefert das sauberste e1RM' },
+  fail: { short: 'Failure', label: 'Bis zum Versagen', desc: 'letzte Wiederholung geht nicht mehr sauber (RIR 0)' },
+};
 
 export function render(root, { navigate }) {
   const w = getActiveWorkout();
@@ -31,7 +40,7 @@ export function render(root, { navigate }) {
   root.append(h('div.workout-head', {}, [
     h('div.row.between', {}, [
       h('button.btn.sm.ghost', { text: 'Abbrechen', onclick: cancel }),
-      h('div.center.grow', {}, [h('div.title.truncate', { text: w.planName }), h('div', {}, [elapsedEl, restMini])]),
+      h('div.center.grow', {}, [h('div.title.truncate', { text: w.planName + (w.deload ? ' · Deload' : '') }), h('div', {}, [elapsedEl, restMini])]),
       h('button.btn.sm.primary', { text: 'Beenden', onclick: finish }),
     ]),
     progressEl,
@@ -50,7 +59,15 @@ export function render(root, { navigate }) {
     }
   };
   cleanup.push(restTimer.on((type) => {
-    if (type === 'done') { haptic([200, 100, 200]); restEls = null; restForEntry = null; toast('Pause vorbei – nächster Satz!'); currentDrawSets?.(); }
+    if (type === 'done') {
+      haptic([200, 100, 200]); restEls = null; restForEntry = null; toast('Pause vorbei – nächster Satz!'); currentDrawSets?.();
+      // Sprachansage: nächster Satz oder nächste Übung
+      const e = w.entries[w.currentIndex];
+      const ni = e.sets.findIndex(s => !s.done);
+      if (ni >= 0) speak(`Pause vorbei. Satz ${ni + 1}: ${sayWeightReps(e.sets[ni].weight, e.sets[ni].reps)}`);
+      else speak(w.entries[w.currentIndex + 1] ? `Pause vorbei. Weiter mit ${w.entries[w.currentIndex + 1].name}` : 'Pause vorbei.');
+    }
+    else if (type === 'warn') speak('Noch zehn Sekunden');
     else if (type === 'stop' || type === 'cancel') { restEls = null; restForEntry = null; currentDrawSets?.(); }
     updateRest();
   }));
@@ -105,6 +122,8 @@ export function render(root, { navigate }) {
     drawNav();
 
     const lib = findExercise(entry.name);
+    const cust = findCustomExercise(entry.name);
+    const musclesTxt = lib ? lib.muscles : cust ? cust.primary.map(k => MUSCLE_NAME[k]).join(', ') : null;
     const rec = recommend({ name: entry.name, sets: entry.targetSets, reps: entry.targetReps, weight: entry.targetWeight, weightStep: entry.weightStep });
     const range = rec.reps;
     const targetTxt = `${entry.targetSets} × ${entry.targetReps}` + ` · Pause ${fmtDuration(entry.restSec)}`;
@@ -119,7 +138,7 @@ export function render(root, { navigate }) {
       thumb ? h('div', { onclick: showInfo }, [thumb]) : null,
       h('div.grow', {}, [
         h('div.wk-name', { text: entry.name }),
-        lib ? h('div.wk-muscles', { text: lib.muscles }) : null,
+        musclesTxt ? h('div.wk-muscles', { text: musclesTxt }) : null,
         h('div.wk-target', { text: targetTxt }),
         supersetWith ? h('div', { style: { marginTop: '4px' } }, [h('span.pill.accent', { text: '⇅ Supersatz mit ' + supersetWith.name })]) : null,
         entry.swappedFrom ? h('div.small.faint', { text: `Getauscht (statt ${entry.swappedFrom}) – nur für heute` }) : null,
@@ -127,9 +146,17 @@ export function render(root, { navigate }) {
       h('div.wk-actions', {}, [
         h('button.btn.icon.ghost', { 'aria-label': 'Ausführung', title: 'Ausführung', html: svgIcon.info, onclick: showInfo }),
         h('button.btn.icon.ghost', { 'aria-label': 'Übung tauschen', title: 'Tauschen', html: svgIcon.swap, onclick: () => swapExercise(entry) }),
+        h('button.btn.icon.ghost' + (entry.sessionNote ? '.has-note' : ''), { 'aria-label': 'Notiz zur Übung', title: 'Notiz', html: svgIcon.note, onclick: editNote }),
       ]),
     ]));
     if (entry.note) body.append(h('p.small.muted', { text: entry.note, style: { marginTop: '8px' } }));
+    // Notiz zu dieser Übung in dieser Session („Schulter zwickt bei Satz 3“) – erscheint beim nächsten Mal unter „Zuletzt“
+    async function editNote() {
+      const v = await promptSheet({ title: 'Notiz zu ' + entry.name, value: entry.sessionNote || '', placeholder: 'z.B. Schulter zwickt bei Satz 3', okLabel: 'Speichern' });
+      if (v == null) return;
+      entry.sessionNote = v; touchWorkout(); drawExercise();
+    }
+    if (entry.sessionNote) body.append(h('button.wk-setup-line', { style: { marginTop: '8px' }, onclick: editNote }, [h('span.wk-setup-ico', { html: svgIcon.note }), h('span.truncate', { text: entry.sessionNote })]));
 
     // Maschineneinstellungen (übungsübergreifend gespeichert): Einzeiler, Tipp → Eingabefeld
     body.append(setupRow(entry));
@@ -141,18 +168,34 @@ export function render(root, { navigate }) {
       : `– × ${entry.targetReps}`;
     const lastTxt = lastEntry ? fmtLastSets(lastEntry.sets) : '–';
     const showMsg = rec.status !== 'keep' || rec.decline;
-    body.append(h('div.card.mt.wk-brief', {}, [
+    // Stagnation? Deload-Angebot nur, wenn nicht ohnehin Deload-Woche ist und noch kein Satz erledigt wurde
+    const plateau = !w.deload && !entry.deload && !entry.sets.some(s => s.done) ? plateauFor(entry.name) : null;
+    const dl = plateau ? deloadFor(plateau.weight ?? rec.weight, entry.weightStep || 2.5, entry.targetSets) : null;
+    body.append(h('div.card.mt.wk-brief' + (entry.deload ? '.deload' : ''), {}, [
       h('div.wk-last', {}, [
         h('div', {}, [
           h('div.lbl', { text: 'Zuletzt' + (lastDate ? ` · ${fmtShortDate(lastDate)}` : '') }),
           h('div.val', { text: lastTxt }),
         ]),
         h('div', {}, [
-          h('div.lbl', { text: 'Heute' }),
+          h('div.lbl', { text: entry.deload || w.deload ? 'Heute · Deload' : 'Heute' }),
           h('div.val.rec', { text: recTxt }),
         ]),
       ]),
-      showMsg ? h('div.msg' + (rec.decline ? '.warn' : ''), { text: rec.decline ? 'Letzte Einheit lag unter deinem bisherigen Niveau – Gewicht reduzieren bleibt deine Entscheidung.' : rec.message }) : null,
+      lastEntry?.sessionNote ? h('div.msg', { html: `<b>Notiz zuletzt:</b> ${escapeHtml(lastEntry.sessionNote)}` }) : null,
+      showMsg && !plateau ? h('div.msg' + (rec.decline ? '.warn' : ''), { text: rec.decline ? 'Letzte Einheit lag unter deinem bisherigen Niveau – Gewicht reduzieren bleibt deine Entscheidung.' : rec.message }) : null,
+      plateau ? h('div.msg.warn', {}, [
+        h('div', { text: `Seit ${plateau.sessions} Einheiten kein Fortschritt (bestes e1RM ${fmtKg(Math.round(plateau.bestE1rm))} am ${fmtShortDate(plateau.since)})${plateau.grinding ? ' – zuletzt durchgehend RIR 0.' : '.'}` }),
+        h('div.row', { style: { gap: '8px', marginTop: '8px', flexWrap: 'wrap' } }, [
+          h('button.btn.sm.ghost', { text: `Deload heute: ${fmtKg(dl.weight)} × ${dl.sets} Sätze`, onclick: () => {
+            entry.deload = true;
+            entry.sets = entry.sets.filter(s => !s.done).slice(0, dl.sets).map(s => ({ ...s, weight: dl.weight }));
+            entry.warmup = null; entry.warmupFor = null;
+            touchWorkout(); drawExercise(); toast('Deload für diese Übung – leicht und sauber.');
+          } }),
+          h('button.btn.sm.ghost', { text: 'Tauschen', onclick: () => swapExercise(entry) }),
+        ]),
+      ]) : null,
     ]));
 
     // Sätze
@@ -201,6 +244,18 @@ export function render(root, { navigate }) {
         if (si === cur) setsBox.append(setCard(entry, set, si, i, drawSets, si === 0 ? drawWarmup : null));
         else setsBox.append(setRow(entry, set, si, drawSets));
       });
+      // Alle Sätze fertig, Pause läuft → Vorschau auf die nächste Übung samt Maschineneinstellungen
+      if (cur === -1 && restTimer.active && restForEntry === entry) {
+        const nextEx = w.entries[i + 1];
+        setsBox.append(restCard(entry, null, null, nextEx ? {
+          title: 'Danach: ' + nextEx.name,
+          lines: [
+            `${nextEx.targetSets} × ${nextEx.targetReps}` + (nextEx.sets[0]?.weight != null ? ` · ${fmtKg(nextEx.sets[0].weight)}` : ''),
+            getExerciseSettings(nextEx.name).setup || null,
+          ].filter(Boolean),
+          action: { label: 'Weiter', fn: () => go(i + 1) },
+        } : { title: 'Letzte Übung geschafft', lines: [], action: { label: 'Abschließen', fn: finish } }));
+      }
       setsBox.append(h('div.add-set', {}, [
         h('button.btn.sm.ghost', { text: '– Satz', disabled: entry.sets.length <= 1 || entry.sets[entry.sets.length - 1].done, onclick: () => { entry.sets.pop(); touchWorkout(); drawSets(); drawProgress(); drawNav(); } }),
         h('button.btn.sm.ghost', { text: '+ Satz', onclick: () => {
@@ -221,13 +276,13 @@ export function render(root, { navigate }) {
     }, [
       set.done ? h('span.mini-check', { html: svgIcon.check }) : h('span.no', { text: String(si + 1) }),
       h('span.sum', { text: `${fmtKg(set.weight)} × ${set.reps ?? '–'}` }),
-      h('span.tag', { text: set.done ? (set.rir != null ? `RIR ${set.rir}` : '') : `Satz ${si + 1}` }),
+      h('span.tag', { text: [set.type ? SET_TYPES[set.type].short : '', set.done ? (set.rir != null ? `RIR ${set.rir}` : '') : `Satz ${si + 1}`].filter(Boolean).join(' · ') }),
     ]);
     return row;
   };
 
-  // ---------- Pausenring (inline über dem nächsten Satz) ----------
-  const restCard = (entry, set, si) => {
+  // ---------- Pausenring (inline über dem nächsten Satz, oder mit Vorschau auf die nächste Übung) ----------
+  const restCard = (entry, set, si, preview = null) => {
     const R = 27, C = 2 * Math.PI * R;
     const ringSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     ringSvg.setAttribute('viewBox', '0 0 66 66');
@@ -235,12 +290,17 @@ export function render(root, { navigate }) {
     const prog = mk('prog', 'p');
     ringSvg.append(mk('track'), prog);
     const time = h('div.time', { text: fmtDuration(restTimer.remaining()) });
+    const nextEl = preview
+      ? h('div.next-ex', {}, [h('div.next', { text: preview.title, style: { fontWeight: 700, color: 'var(--text)' } }), ...preview.lines.map(t => h('div.next', { text: t }))])
+      : h('div.next', { text: `Satz ${si + 1}: ${fmtKg(set.weight)} × ${set.reps ?? '–'}` });
     const card = h('div.rest-ring.pop', {}, [
       h('div.ringbox', {}, [ringSvg, h('div.inner', { html: svgIcon.clock })]),
-      h('div.grow', {}, [h('div.lbl', { text: restTimer.running ? 'Pause' : 'Pausiert' }), time, h('div.next', { text: `Satz ${si + 1}: ${fmtKg(set.weight)} × ${set.reps ?? '–'}` })]),
+      h('div.grow', {}, [h('div.lbl', { text: restTimer.running ? 'Pause' : 'Pausiert' }), time, nextEl]),
       h('div.btns', {}, [
         h('button.btn.ghost', { text: '+30s', onclick: (e) => { e.stopPropagation(); restTimer.add(30); } }),
-        h('button.btn.primary', { text: 'Skip', onclick: (e) => { e.stopPropagation(); restTimer.stop(true); } }),
+        preview
+          ? h('button.btn.primary', { text: preview.action.label, onclick: (e) => { e.stopPropagation(); preview.action.fn(); } })
+          : h('button.btn.primary', { text: 'Skip', onclick: (e) => { e.stopPropagation(); restTimer.stop(true); } }),
       ]),
     ]);
     restEls = { time, prog, C, card, lbl: card.querySelector('.lbl') };
@@ -252,9 +312,17 @@ export function render(root, { navigate }) {
     const card = h('div.card.set-card.current' + (set.done ? '.done' : ''));
     const step = entry.weightStep || 2.5;
     const sum = h('div.set-sum', { text: `${fmtKg(set.weight)} × ${set.reps ?? '–'}` });
+    // Satztyp: Arbeitssatz (Standard), Drop, AMRAP, Failure – tippen öffnet die Auswahl
+    const typeBtn = h('button.set-type' + (set.type ? '.' + set.type : ''), { text: SET_TYPES[set.type || 'work'].short, onclick: () => {
+      actionSheet('Satztyp', Object.entries(SET_TYPES).map(([k, t]) => ({ label: `${t.label} – ${t.desc}`, fn: () => {
+        set.type = k === 'work' ? undefined : k;
+        if (k === 'amrap' || k === 'fail') set.rir = 0;
+        touchWorkout(); redrawAll();
+      } })));
+    } });
     const head = h('div.set-head', {}, [
       h('div.row', { style: { gap: '8px' } }, [h('div.set-title', { text: `Satz ${si + 1}` }), sum]),
-      set.done ? h('div.check-badge', { html: svgIcon.check }) : h('span.faint.small', { text: `von ${entry.sets.length}` }),
+      h('div.row', { style: { gap: '8px' } }, [typeBtn, set.done ? h('div.check-badge', { html: svgIcon.check }) : h('span.faint.small', { text: `von ${entry.sets.length}` })]),
     ]);
     card.append(head);
 
@@ -285,7 +353,7 @@ export function render(root, { navigate }) {
     const btn = h('button.btn.block.set-done-btn' + (set.done ? '.ghost' : '.good'), {
       html: set.done ? '<span>Erledigt – tippen zum Zurücksetzen</span>' : svgIcon.check + '<span>Satz abschließen</span>',
       onclick: () => {
-        unlockAudio();
+        unlockAudio(); primeSpeech();
         if (set.done) {
           set.done = false; entry.expanded = si; restTimer.stop(true); touchWorkout(); redrawAll(); drawProgress(); drawNav(); return;
         }
@@ -371,7 +439,8 @@ export function render(root, { navigate }) {
   // ---------- Scheibenrechner / Gewicht direkt eingeben ----------
   function openWeightSheet(entry, current, commit) {
     const es = getExerciseSettings(entry.name);
-    const isBarbell = (entry.weightStep || 2.5) === 2.5 && !/kurzhantel|kh\b|maschine|kabel/i.test(entry.name);
+    const custom = findCustomExercise(entry.name);
+    const isBarbell = custom ? !!custom.barbell : (entry.weightStep || 2.5) === 2.5 && !/kurzhantel|kh\b|maschine|kabel/i.test(entry.name);
     let bar = es.barWeight != null ? es.barWeight : (isBarbell ? getSettings().barWeight : 0);
     let value = current ?? 0;
     openSheet((sheet, close) => {
@@ -481,7 +550,9 @@ export function render(root, { navigate }) {
             toast(prs.length ? `Gespeichert – ${prs.length} neue${prs.length === 1 ? 'r' : ''} Rekord${prs.length === 1 ? '' : 'e'}!` : 'Workout gespeichert');
             navigate('/session/' + s.id + '?fresh=1', true);
             // Daten liegen nur auf dem Gerät – alle 10 Workouts an die Sicherung erinnern
-            if (backupDue()) setTimeout(() => toast('10 Workouts seit der letzten Sicherung', { action: { label: 'Jetzt sichern', fn: exportBackup }, duration: 9000 }), 2600);
+            const fresh = newMilestones();
+            if (fresh.length) setTimeout(() => toast('Meilenstein: ' + fresh.map(m => m.title).join(', '), { duration: 3500 }), 1200);
+            if (backupDue()) setTimeout(() => toast('10 Workouts seit der letzten Sicherung', { action: { label: 'Jetzt sichern', fn: exportBackup }, duration: 9000 }), fresh.length ? 5000 : 2600);
           } }),
         ]),
       );

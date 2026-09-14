@@ -1,14 +1,124 @@
 // Fortschritt: Übersicht, Übungsanalyse (Kennzahlen/Zeiträume/Rekorde), Session-Detail, Muskelgruppen-Dashboard
-import { h, svg, svgIcon, fmtDuration, fmtDurationLong, fmtDate, fmtShortDate, fmtWeight, fmtNum, dateParts, weekKey, confirmSheet, toast, promptSheet, openSheet, parseNum, illustration } from '../util.js';
+import { h, svg, svgIcon, fmtDuration, fmtDurationLong, fmtDate, fmtShortDate, fmtWeight, fmtNum, dateParts, weekKey, confirmSheet, toast, promptSheet, openSheet, parseNum, illustration, iconBox, isoWeek } from '../util.js';
 import { getSessions, getSession, deleteSession, updateSession, exerciseIndex, exerciseHistory, entryBest, sessionVolume, getSettings, getBodyLog } from '../store.js';
-import { prBaseline, sessionPRs, fmtKg, PR_LABELS, percentTable, inferWeightStep } from '../progression.js';
-import { MUSCLES, MUSCLE_NAME, muscleSets, sessionsInWeek, muscleWeekStats, bodyMapSvg, intensityColor, ratioFor } from '../muscles.js';
+import { prBaseline, sessionPRs, fmtKg, PR_LABELS, percentTable, inferWeightStep, plateauFor, deloadFor } from '../progression.js';
+import { MUSCLES, MUSCLE_NAME, muscleSets, sessionsInWeek, muscleWeekStats, bodyMapSvg, intensityColor, ratioFor, volumeTarget, volumeStatus } from '../muscles.js';
+import { shareSession } from '../share.js';
+import { milestonesReachedAt, allMilestones } from '../milestones.js';
+import { strengthStandard, LEVELS } from '../standards.js';
+import { openCustomExerciseEditor } from './custom-exercise.js';
+
+const LEVELS_LABEL = (i) => LEVELS[i];
 
 export function render(root, ctx) {
   if (ctx.sub === 'exercise') return renderExercise(root, ctx);
   if (ctx.sub === 'session') return renderSession(root, ctx);
   if (ctx.sub === 'muscles') return renderMuscles(root, ctx);
+  if (ctx.sub === 'week') return renderWeek(root, ctx);
+  if (ctx.sub === 'milestones') return renderMilestones(root, ctx);
   return renderOverview(root, ctx);
+}
+
+// ---------- Meilensteine ----------
+
+function renderMilestones(root, { navigate }) {
+  root.append(h('button.back', { html: svgIcon.back + '<span>Fortschritt</span>', onclick: () => navigate('/progress') }));
+  const all = allMilestones();
+  const done = all.filter(m => m.at).sort((a, b) => b.at - a.at);
+  const open = all.filter(m => !m.at);
+  root.append(h('div.page-head', {}, [h('div', {}, [h('div.eyebrow', { text: `${done.length} von ${all.length}` }), h('h1', { text: 'Meilensteine' })])]));
+  if (done.length) {
+    root.append(h('div.subhead', {}, [h('h2', { text: 'Erreicht' })]));
+    root.append(h('div.card', {}, done.map(m => h('div.pr-row', {}, [
+      iconBox('trophy', 'good'),
+      h('div.grow', { style: { marginLeft: '10px' } }, [h('div', { text: m.title, style: { fontWeight: 700 } }), h('div.sub', { text: `${m.desc} · ${fmtDate(m.at)}` })]),
+    ]))));
+  }
+  if (open.length) {
+    root.append(h('div.subhead', {}, [h('h2', { text: 'Noch offen' })]));
+    root.append(h('div.card', {}, open.map(m => h('div.pr-row', { style: { opacity: 0.6 } }, [
+      iconBox('trophy', 'neutral'),
+      h('div.grow', { style: { marginLeft: '10px' } }, [h('div', { text: m.title, style: { fontWeight: 600 } }), h('div.sub', { text: m.desc })]),
+    ]))));
+  }
+}
+
+// ---------- Wochenrückblick ----------
+
+/** Kennzahlen einer Kalenderwoche (Montag-Start) */
+export function weekStats(sessions, weekStart) {
+  const list = sessionsInWeek(sessions, weekStart);
+  const sets = list.reduce((a, s) => a + s.entries.reduce((b, e) => b + e.sets.length, 0), 0);
+  const volume = list.reduce((a, s) => a + sessionVolume(s), 0);
+  const duration = list.reduce((a, s) => a + (s.durationSec || 0), 0);
+  const prs = list.flatMap(s => sessionPRs(s).map(p => ({ ...p, session: s })));
+  const muscles = muscleSets(list).totals;
+  return { list, sets, volume, duration, prs, muscles, weekStart };
+}
+
+function renderWeek(root, { params, navigate }) {
+  const sessions = getSessions();
+  const settings = getSettings();
+  let weekStart = weekKey(Number(params[0]) || Date.now());
+  root.append(h('button.back', { html: svgIcon.back + '<span>Fortschritt</span>', onclick: () => navigate('/progress') }));
+  const head = h('div.page-head');
+  const body = h('div');
+  root.append(head, body);
+
+  const draw = () => {
+    const cur = weekStats(sessions, weekStart);
+    const prev = weekStats(sessions, weekStart - 7 * 86400000);
+    const end = weekStart + 6 * 86400000;
+    const isThis = weekStart === weekKey(Date.now());
+    head.innerHTML = '';
+    head.append(
+      h('div.grow', {}, [h('div.eyebrow', { text: `${fmtShortDate(weekStart)} – ${fmtShortDate(end)}` }), h('h1', { text: (isThis ? 'Diese Woche' : `KW ${isoWeek(weekStart)}`) })]),
+      h('div.row', { style: { gap: '6px' } }, [
+        h('button.btn.icon.ghost', { text: '‹', 'aria-label': 'Vorherige Woche', style: { fontSize: '22px' }, onclick: () => { weekStart -= 7 * 86400000; draw(); } }),
+        h('button.btn.icon.ghost', { text: '›', 'aria-label': 'Nächste Woche', style: { fontSize: '22px' }, disabled: isThis, onclick: () => { weekStart += 7 * 86400000; draw(); } }),
+      ]),
+    );
+    body.innerHTML = '';
+    const delta = (a, b, fmt = (v) => String(v)) => {
+      const d = a - b;
+      if (!b && !a) return '';
+      return `<span class="chip-delta ${d > 0 ? '' : d < 0 ? 'down' : 'flat'}">${d > 0 ? '+' : ''}${fmt(d)}</span>`;
+    };
+    body.append(h('div.stats', {}, [
+      stat(`${cur.list.length} ${delta(cur.list.length, prev.list.length)}`, 'Trainings'),
+      stat(`${cur.sets} ${delta(cur.sets, prev.sets)}`, 'Sätze'),
+      stat(`${fmtNum(cur.volume)}<small>${settings.unit}</small> ${delta(cur.volume, prev.volume, fmtNum)}`, 'Volumen'),
+      stat(`${cur.prs.length}`, 'Rekorde'),
+    ]));
+    body.append(h('p.small.faint.mt', { text: 'Veränderung gegenüber der Vorwoche · ' + (cur.duration ? `${fmtDurationLong(cur.duration)} trainiert` : 'kein Training') }));
+
+    // Muskeln: diese vs. Vorwoche
+    const rows = MUSCLES.map(([k, n]) => [k, n, cur.muscles[k], prev.muscles[k]]).filter(r => r[2] > 0 || r[3] > 0).sort((a, b) => b[2] - a[2]);
+    if (rows.length) {
+      body.append(h('div.subhead', {}, [h('h2', { text: 'Muskelgruppen' })]));
+      const t = volumeTarget();
+      body.append(h('div.card', {}, rows.map(([k, n, a, b]) => h('div.row.between', { style: { padding: '6px 0' } }, [
+        h('span', { text: n }),
+        h('span.mono', { html: `${fmtSetsShort(a)} <span class="faint">(${fmtSetsShort(b)})</span>` + (a > 0 ? ` <span class="mtag ${volumeStatus(a)}">${volumeStatus(a) === 'in' ? '✓' : volumeStatus(a) === 'under' ? '↓' : '↑'}</span>` : '') }),
+      ])).concat([h('p.small.faint', { style: { marginTop: '6px' }, text: `Ziel ${t.min}–${t.max} Sätze · in Klammern die Vorwoche` })])));
+    }
+
+    if (cur.prs.length) {
+      body.append(h('div.subhead', {}, [h('h2', { text: 'Neue Rekorde' })]));
+      body.append(h('div.card', {}, cur.prs.map(p => h('div.pr-row', { onclick: () => navigate('/exercise/' + encodeURIComponent(p.name)), style: { cursor: 'pointer' } }, [
+        h('div.grow', {}, [h('div', { text: p.name, style: { fontWeight: 600 } }), h('div.sub', { text: `${PR_LABELS[p.type]} · ${fmtShortDate(p.session.startedAt)}` })]),
+        h('div.val', { text: p.type === 'volume' ? `${fmtNum(p.value)} ${settings.unit}` : p.type === 'e1rm' ? fmtKg(Math.round(p.value)) : `${fmtKg(p.weight)} × ${p.reps}` }),
+      ]))));
+    }
+
+    body.append(h('div.subhead', {}, [h('h2', { text: 'Trainings' })]));
+    if (cur.list.length) {
+      const list = h('div.list');
+      for (const s of [...cur.list].reverse()) list.append(sessionRow(s, settings, navigate));
+      body.append(list);
+    } else body.append(h('p.muted', { text: 'Keine Trainings in dieser Woche.' }));
+  };
+  draw();
 }
 
 // ---------- Übersicht ----------
@@ -47,7 +157,7 @@ function renderOverview(root, { navigate }) {
     h('div.row.between', {}, [
       h('div.grow', {}, [
         h('div.title-ico', { html: svgIcon.body + '<b>Muskelgruppen</b>' }),
-        h('div.small.faint', { text: top.length ? 'Diese Woche: ' + top.map(([k, n]) => `${MUSCLE_NAME[k]} ${fmtSets(n)}`).join(' · ') : 'Wochenbilanz und Körperkarte' }),
+        h('div.small.faint', { text: top.length ? 'Diese Woche: ' + top.map(([k, n]) => `${MUSCLE_NAME[k]} ${fmtSetsShort(n)}/${volumeTarget().max}`).join(' · ') : 'Wochenbilanz und Körperkarte' }),
       ]),
       h('div', { html: svgIcon.chevron }),
     ]),
@@ -61,6 +171,20 @@ function renderOverview(root, { navigate }) {
       h('div.grow', {}, [
         h('div.title-ico', { html: svgIcon.scale + '<b>Gewicht & Maße</b>' }),
         h('div.small.faint', { text: lastBody ? `Zuletzt ${String(lastBody.weight).replace('.', ',')} kg · ${fmtShortDate(lastBody.date)}` : 'Körpergewicht und Umfänge protokollieren' }),
+      ]),
+      h('div', { html: svgIcon.chevron }),
+    ]),
+  ]));
+
+  // Meilensteine
+  const mstones = allMilestones();
+  const reached = mstones.filter(m => m.at);
+  const latest = reached.sort((a, b) => b.at - a.at)[0];
+  root.append(h('div.card.tappable', { onclick: () => navigate('/milestones'), style: { marginTop: '10px' } }, [
+    h('div.row.between', {}, [
+      h('div.grow', {}, [
+        h('div.title-ico', { html: svgIcon.trophy + `<b>Meilensteine</b>` }),
+        h('div.small.faint', { text: `${reached.length} von ${mstones.length}` + (latest ? ` · zuletzt „${latest.title}“` : '') }),
       ]),
       h('div', { html: svgIcon.chevron }),
     ]),
@@ -184,6 +308,21 @@ function renderExercise(root, { params, navigate }) {
 
   if (!hist.length) { root.append(h('div.empty', {}, [h('p', { text: 'Keine Daten.' })])); return; }
 
+  // Stagnation?
+  const plateau = plateauFor(name);
+  if (plateau) {
+    const dl = deloadFor(plateau.weight, inferWeightStep(name), 3);
+    root.append(h('div.card.mt.alert-card', {}, [
+      h('div.title-ico', { html: svgIcon.warning + `<b>Plateau seit ${plateau.sessions} Einheiten</b>` }),
+      h('p.small.muted', { style: { marginTop: '6px' }, text: `Bestes e1RM ${fmtKg(Math.round(plateau.bestE1rm))} am ${fmtDate(plateau.since)}, seitdem keine Verbesserung${plateau.grinding ? ' – und zuletzt jeder Satz mit RIR 0' : ''}.` }),
+      h('ul.tips.mt', {}, [
+        h('li', { text: `Deload: eine Einheit mit ${fmtKg(dl.weight)} × ${dl.sets} Sätzen, dann wieder normal – im Training gibt es dafür einen Knopf.` }),
+        h('li', { text: 'Wiederholungsbereich wechseln (z.B. 6–10 statt 10–15) oder das Tempo ändern.' }),
+        h('li', { text: 'Übung für 4–6 Wochen durch eine Variante mit gleicher Muskelgruppe tauschen.' }),
+      ]),
+    ]));
+  }
+
   // Punkte pro Einheit
   const points = hist.map(({ session, entry }) => {
     const b = entryBest(entry);
@@ -278,6 +417,37 @@ function renderExercise(root, { params, navigate }) {
   if (repsRows.length) recs.append(prRow('Meiste Wiederholungen je Gewicht', '', repsRows.map(([w, r]) => `${fmtKg(w)}: ${r.reps} Wdh`).join(' · ')));
   root.append(recs);
 
+  // Kraftstandard relativ zum Körpergewicht
+  const std = base.e1rm ? strengthStandard(name, base.e1rm.value) : null;
+  if (std) {
+    root.append(h('div.subhead', {}, [h('h2', { text: 'Kraftstandard' })]));
+    if (std.needsBodyweight) {
+      root.append(h('div.card', {}, [
+        h('p.small.muted', { text: 'Trag dein Körpergewicht unter „Gewicht & Maße“ ein, dann siehst du hier, wo dein e1RM im Vergleich steht.' }),
+        h('button.btn.sm.ghost.mt', { text: 'Körpergewicht eintragen', onclick: () => navigate('/body') }),
+      ]));
+    } else {
+      const pct = std.level < 0 ? (base.e1rm.value / std.thresholds[0]) * 100
+        : std.next ? ((base.e1rm.value - std.thresholds[std.level]) / (std.next.weight - std.thresholds[std.level])) * 100 : 100;
+      root.append(h('div.card.standard-card', {}, [
+        h('div.row.between', {}, [
+          h('div', {}, [
+            h('div.small.faint', { text: `e1RM ${fmtKg(Math.round(base.e1rm.value))} · ${std.ratio.toFixed(2).replace('.', ',')} × Körpergewicht (${fmtKg(std.bodyweight)})` }),
+            h('div.std-level', { text: std.levelName }),
+          ]),
+          iconBox('medal', std.level >= 2 ? 'good' : ''),
+        ]),
+        h('div.std-track', {}, [h('i', { style: { width: `${Math.max(2, Math.min(100, pct))}%` } })]),
+        h('div.row.between.small.faint', { style: { marginTop: '4px' } }, [
+          h('span', { text: std.level < 0 ? 'Einsteiger' : LEVELS_LABEL(std.level) }),
+          h('span', { text: std.next ? `${std.next.name} ab ${fmtKg(Math.round(std.next.weight))} · noch ${fmtKg(Math.round(std.next.missing))}` : 'Höchste Stufe erreicht' }),
+        ]),
+        h('div.std-scale', {}, std.thresholds.map((t, i) => h('span' + (i <= std.level ? '.on' : ''), { text: `${fmtKg(Math.round(t))}` }))),
+        h('p.small.faint.mt', { text: 'Richtwerte für den Sport – Körperbau, Alter und Technik spielen mit rein.' }),
+      ]));
+    }
+  }
+
   // 1RM-/Prozent-Tabelle
   if (base.e1rm) {
     const step = inferWeightStep(name);
@@ -333,6 +503,23 @@ function renderSession(root, { params, query, navigate }) {
     stat(String(prs.length), 'Rekorde'),
   ]));
 
+  // Teilbare Bildkarte
+  const shareBtn = h('button.btn.block.mt' + (fresh ? '.primary' : '.ghost'), { html: svgIcon.share + '<span>Workout-Karte teilen</span>', onclick: async () => {
+    shareBtn.disabled = true;
+    try { await shareSession(s); } catch (e) { toast('Teilen fehlgeschlagen: ' + e.message, { duration: 4000 }); }
+    finally { shareBtn.disabled = false; }
+  } });
+  root.append(shareBtn);
+
+  // Meilensteine, die mit diesem Workout erreicht wurden
+  const reached = milestonesReachedAt(s);
+  if (reached.length) {
+    root.append(h('div.card.mt.milestone-card', {}, reached.map(m => h('div.row', { style: { gap: '12px' } }, [
+      iconBox('trophy', 'good'),
+      h('div.grow', {}, [h('div', { text: m.title, style: { fontWeight: 700 } }), h('div.small.faint', { text: m.desc })]),
+    ]))));
+  }
+
   // Trainierte Muskeln
   root.append(h('div.subhead', {}, [h('h2', { text: 'Trainierte Muskeln' })]));
   root.append(h('div.grid-2', {}, [
@@ -358,8 +545,9 @@ function renderSession(root, { params, query, navigate }) {
       h('div.idx', { text: i + 1 }),
       h('div.grow', {}, [
         h('div', { text: e.name, style: { fontWeight: 600 } }),
-        h('div.target', { text: e.sets.map(s => `${s.weight ?? '–'}×${s.reps ?? '–'}` + (s.rir != null ? ` (RIR ${s.rir})` : '')).join(' · ') }),
+        h('div.target', { text: e.sets.map(s => `${s.weight ?? '–'}×${s.reps ?? '–'}` + (s.type ? ` ${s.type.toUpperCase()}` : '') + (s.rir != null ? ` (RIR ${s.rir})` : '')).join(' · ') }),
         h('div.small.faint', { text: `Volumen ${fmtNum(b.volume)} ${settings.unit} · Best ${fmtWeight(b.maxWeight, settings.unit)} · e1RM ${fmtWeight(Math.round(b.e1rm), settings.unit)}` }),
+        e.sessionNote ? h('div.small.muted', { text: `„${e.sessionNote}“` }) : null,
       ]),
       h('div', { html: svgIcon.chevron }),
     ]));
@@ -479,19 +667,28 @@ function renderMuscles(root, { navigate }) {
       ]));
     }
 
-    // Balken
+    // Balken mit Zielband (Volumen-Ziel aus den Einstellungen)
     barsCard.innerHTML = '';
-    const max = Math.max(1, ...Object.values(ms.totals));
+    const target = volumeTarget();
+    const max = Math.max(target.max * 1.15, ...Object.values(ms.totals));
+    barsCard.append(h('div.small.faint', { style: { marginBottom: '4px' }, text: `Ziel ${target.min}–${target.max} Sätze pro Woche (unter „Mehr“ einstellbar)` }));
     for (const [k, label] of MUSCLES) {
       const n = ms.totals[k];
+      const st = volumeStatus(n);
       const color = intensityColor(ratioFor(n)) || 'var(--surface-3)';
-      barsCard.append(h('div.mbar' + (mSelected === k ? '.selected' : ''), { onclick: () => { mSelected = mSelected === k ? null : k; draw(); } }, [
+      barsCard.append(h('div.mbar.' + st + (mSelected === k ? '.selected' : ''), { onclick: () => { mSelected = mSelected === k ? null : k; draw(); } }, [
         h('div.name', { text: label }),
-        h('div.track', {}, [(() => { const bar = h('i', { style: { width: firstDraw ? '0%' : `${(n / max) * 100}%`, background: color } }); if (firstDraw) requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = `${(n / max) * 100}%`; })); return bar; })()]),
-        h('div.n', { text: fmtSetsShort(n) }),
+        h('div.track', {}, [
+          h('span.band', { style: { left: `${(target.min / max) * 100}%`, width: `${((target.max - target.min) / max) * 100}%` } }),
+          (() => { const bar = h('i', { style: { width: firstDraw ? '0%' : `${(n / max) * 100}%`, background: color } }); if (firstDraw) requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = `${(n / max) * 100}%`; })); return bar; })(),
+        ]),
+        h('div.n', { html: fmtSetsShort(n) + (n > 0 ? `<span class="mtag ${st}">${st === 'in' ? '✓' : st === 'under' ? '↓' : '↑'}</span>` : '') }),
       ]));
     }
-    if (ms.unknown.length) barsCard.append(h('p.small.faint.mt', { text: 'Ohne Zuordnung: ' + ms.unknown.join(', ') + ' – Namen wie in der Übungsbibliothek verwenden.' }));
+    if (ms.unknown.length) barsCard.append(h('div.mt', {}, [
+      h('p.small.faint', { text: 'Ohne Zuordnung: ' + ms.unknown.join(', ') }),
+      h('div.row', { style: { gap: '6px', flexWrap: 'wrap', marginTop: '6px' } }, ms.unknown.map(n => h('button.btn.sm.ghost', { text: `„${n}“ zuordnen`, onclick: () => openCustomExerciseEditor(n, () => draw()) }))),
+    ]));
     if (!wkSessions.length) barsCard.append(h('p.small.muted.mt', { text: 'Keine Workouts in dieser Woche.' }));
   };
   draw();

@@ -1,6 +1,7 @@
 // Muskelgruppen: Taxonomie, Zuordnung von Übungen, Satz-Auswertung, Körperkarte (SVG)
 import { findExercise, normalizeExerciseName } from './exercise-db.js';
 import { weekKey } from './util.js';
+import { getSettings, getCustomExercises } from './store.js';
 
 export const MUSCLES = [
   ['chest', 'Brust'],
@@ -35,8 +36,17 @@ const RULES = [
   [/crunch|plank|bauch|abs|core|beinheben|leg raise|situp|sit.?up|russian|hollow|wood/, ['abs'], []],
 ];
 
-/** @returns {{primary:string[], secondary:string[], source:'library'|'rule'|'none'}} */
+/** Eigene Übung zum Namen (exakt oder über Aliase), sonst null */
+export function findCustomExercise(name) {
+  const n = normalizeExerciseName(name);
+  if (!n) return null;
+  return getCustomExercises().find(c => normalizeExerciseName(c.name) === n || (c.aliases || []).some(a => normalizeExerciseName(a) === n)) || null;
+}
+
+/** @returns {{primary:string[], secondary:string[], source:'custom'|'library'|'rule'|'none'}} */
 export function musclesFor(name) {
+  const c = findCustomExercise(name);
+  if (c) return { primary: c.primary || [], secondary: c.secondary || [], source: 'custom' };
   const e = findExercise(name);
   if (e && e.primary) return { primary: e.primary, secondary: e.secondary || [], source: 'library' };
   const n = normalizeExerciseName(name);
@@ -91,9 +101,22 @@ export function intensityColor(ratio) {
   return `hsl(${hue.toFixed(0)}, 85%, ${(52 - 6 * r).toFixed(0)}%)`;
 }
 
-/** Referenz: 12 Sätze/Woche = volle Intensität; im Session-Modus 6 Sätze */
+/** Wochenziel je Muskelgruppe (Sätze) aus den Einstellungen */
+export function volumeTarget() {
+  const s = getSettings();
+  const min = Math.max(1, s.volumeMin || 10), max = Math.max(min, s.volumeMax || 20);
+  return { min, max };
+}
+
+/** 'under' | 'in' | 'over' relativ zum Wochenziel */
+export function volumeStatus(sets) {
+  const { min, max } = volumeTarget();
+  return sets < min ? 'under' : sets > max ? 'over' : 'in';
+}
+
+/** Referenz: Obergrenze des Wochenziels = volle Intensität; im Session-Modus 6 Sätze */
 export function ratioFor(sets, mode = 'week') {
-  const ref = mode === 'session' ? 6 : 12;
+  const ref = mode === 'session' ? 6 : volumeTarget().max;
   return sets / ref;
 }
 
@@ -161,7 +184,8 @@ export function bodyMapSvg(side, sets, opts = {}) {
   for (const [region, d] of Object.entries(regions)) {
     const muscle = REGION_MUSCLE[region];
     const n = sets?.[muscle] || 0;
-    const ratio = ratioFor(n, opts.mode);
+    // opts.ratios: fertige Intensitäten 0..1 (z.B. Ermüdung) statt Satzzahlen
+    const ratio = opts.ratios ? (opts.ratios[muscle] || 0) : ratioFor(n, opts.mode);
     // mono: Akzentfarbe mit Deckkraft nach Intensität (ruhiger, z.B. für kleine Vorschauen) statt Grün→Rot
     const color = opts.mono ? (ratio > 0 ? 'var(--accent)' : null) : intensityColor(ratio);
     const sel = opts.selected === muscle ? ' selected' : '';

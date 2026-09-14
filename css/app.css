@@ -969,3 +969,54 @@ body:has(.view.wk-view) .pr-toast { top: calc(var(--safe-top) + 88px); }
 /* Kleiner Icon-Button in Kopfzeilen */
 .btn.sm.icon { width: 38px; min-height: 38px; padding: 0; }
 .btn.sm.icon svg { width: 18px; height: 18px; }
+
+/* ==================================================================
+   1.6: Cloud, Erholung, Share, Plateau/Deload, Volumen-Ziele, Satztypen,
+        Kraftstandards, Wochenrückblick, Meilensteine, eigene Übungen
+   ================================================================== */
+.hero .meta.reason { color: var(--text); font-size: 13px; margin-top: 6px; }
+.recovery-maps { display: flex; gap: 4px; flex: none; }
+.recovery-maps .bodymap { width: 32px; height: 66px; }
+.card.recovery, .card.review { margin-bottom: 12px; }
+
+.alert-card { border-color: color-mix(in srgb, var(--warn) 55%, var(--border)); }
+.alert-card .title-ico svg { fill: var(--warn); }
+.wk-brief.deload { border-color: color-mix(in srgb, var(--warn) 50%, var(--border)); }
+.milestone-card { border-color: color-mix(in srgb, var(--good) 50%, var(--border)); display: flex; flex-direction: column; gap: 10px; }
+
+/* Satztyp-Tag in der Satz-Karte */
+.set-type {
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-3);
+  border-radius: 8px; padding: 3px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; font-family: inherit;
+}
+.set-type.drop { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.set-type.amrap { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--border)); }
+.set-type.fail { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+
+/* Volumen-Ziel: Band im Balken + Status-Tag */
+.mbar .track { position: relative; }
+.mbar .track .band { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--good) 22%, transparent); border-left: 1px solid color-mix(in srgb, var(--good) 60%, transparent); border-right: 1px solid color-mix(in srgb, var(--good) 60%, transparent); }
+.mbar .track i { position: relative; }
+.mtag { display: inline-block; margin-left: 4px; font-size: 11px; font-weight: 700; }
+.mtag.in { color: var(--good); } .mtag.under { color: var(--text-3); } .mtag.over { color: var(--warn); }
+
+/* Kraftstandard */
+.std-level { font-family: var(--display); font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; }
+.std-track { height: 10px; border-radius: 5px; background: var(--surface-3); overflow: hidden; margin-top: 12px; }
+.std-track i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--good)); border-radius: 5px; transition: width 600ms var(--ease); }
+.std-scale { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: var(--text-3); font-family: var(--mono); }
+.std-scale span.on { color: var(--good); font-weight: 700; }
+
+/* Pausenring mit Vorschau */
+.rest-ring .next-ex .next { white-space: normal; }
+
+/* Notiz-Button markieren, wenn eine Notiz existiert */
+.wk-actions .btn.icon.has-note { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+
+/* Trainingstage & Muskel-Chips */
+.day-row, .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.day-row .chip { min-width: 42px; }
+.chips .chip { height: 34px; font-size: 13px; padding: 0 10px; }
+
+/* Kopf mit Aktionsbutton rechts (Bibliothek) */
+.page-head .btn.icon { flex: none; }

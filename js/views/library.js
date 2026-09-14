@@ -2,16 +2,38 @@
 import { h, svgIcon, toast } from '../util.js';
 import { EXERCISES } from '../exercise-db.js';
 import { TEMPLATES, WEEK_PLAN, addTemplate } from '../templates.js';
-import { getPlans } from '../store.js';
+import { getPlans, getCustomExercises } from '../store.js';
+import { MUSCLE_NAME } from '../muscles.js';
 import { openExerciseInfo, figureThumb } from './exercise-info.js';
+import { openCustomExerciseEditor } from './custom-exercise.js';
 
 export function render(root, { navigate, sub }) {
   root.append(h('button.back', { html: svgIcon.back + '<span>Mehr</span>', onclick: () => navigate('/settings') }));
 
   if (sub === 'templates') return renderTemplates(root, navigate);
 
-  root.append(h('div.page-head', {}, [h('div', {}, [h('div.eyebrow', { text: `${EXERCISES.length} Übungen` }), h('h1', { text: 'Übungsbibliothek' })])]));
-  root.append(h('p.muted.mb', { text: 'Tippe auf eine Übung für die Bewegungsanimation und Ausführungstipps. Übungen in deinen Plänen werden über den Namen automatisch zugeordnet.' }));
+  const custom = getCustomExercises();
+  root.append(h('div.page-head', {}, [
+    h('div', {}, [h('div.eyebrow', { text: `${EXERCISES.length + custom.length} Übungen` }), h('h1', { text: 'Übungsbibliothek' })]),
+    h('button.btn.sm.ghost.icon', { 'aria-label': 'Eigene Übung anlegen', html: svgIcon.plus, onclick: () => openCustomExerciseEditor(null, () => navigate('/library', true)) }),
+  ]));
+  root.append(h('p.muted.mb', { text: 'Tippe auf eine Übung für die Bewegungsanimation und Ausführungstipps. Übungen in deinen Plänen werden über den Namen automatisch zugeordnet – was fehlt, legst du mit „+“ als eigene Übung an.' }));
+
+  // Eigene Übungen zuerst
+  root.append(h('div.subhead', {}, [h('h2', { text: 'Eigene Übungen' })]));
+  if (custom.length) {
+    const card = h('div.card');
+    for (const c of custom) {
+      card.append(h('div.lib-row', { onclick: () => openCustomExerciseEditor(c, () => navigate('/library', true)) }, [
+        h('div.idx', { html: svgIcon.dumbbell, style: { width: '64px', height: '52px', borderRadius: '10px' } }),
+        h('div.grow', {}, [h('div', { text: c.name, style: { fontWeight: 600 } }), h('div.small.faint', { text: c.primary.map(k => MUSCLE_NAME[k]).join(', ') + (c.secondary?.length ? ` · ${c.secondary.map(k => MUSCLE_NAME[k]).join(', ')}` : '') })]),
+        h('div', { html: svgIcon.edit.replace('<svg', '<svg class="chev"') }),
+      ]));
+    }
+    root.append(card);
+  } else {
+    root.append(h('div.card', {}, [h('p.small.muted', { text: 'Noch keine eigenen Übungen. Für alles, was die Bibliothek nicht kennt: Name, Muskeln, Gewichtsschritt – dann zählt die Übung in Wochenbilanz, Erholung und Progression richtig.' })]));
+  }
 
   const groups = [
     ['Oberkörper', EXERCISES.slice(0, 16)],

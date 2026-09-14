@@ -1,10 +1,12 @@
 // Mehr: Einstellungen, KI-Import, Datensicherung, Installation
-import { h, svgIcon, toast, confirmSheet, fmtDate, isIOS } from '../util.js';
-import { getSettings, updateSettings, importJSON, resetAll, getSessions, getPlans } from '../store.js';
+import { h, svgIcon, toast, confirmSheet, fmtDate, isIOS, weekKey } from '../util.js';
+import { getSettings, updateSettings, importJSON, resetAll, getSessions, getPlans, deloadActive } from '../store.js';
 import { testApiKey } from '../ai-import.js';
 import { exportBackup } from '../backup.js';
+import { cloudPush, cloudPull } from '../cloud.js';
+import { exportCSV, exportICS, WEEKDAYS_DE } from '../exporters.js';
 
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.6.0';
 
 const MODELS = [
   ['claude-opus-5', 'Claude Opus 5 – beste Erkennung (Standard)'],
@@ -12,7 +14,7 @@ const MODELS = [
   ['claude-haiku-4-5', 'Claude Haiku 4.5 – am günstigsten'],
 ];
 
-export function render(root) {
+export function render(root, { navigate }) {
   const s = getSettings();
 
   root.append(h('div.page-head', {}, [h('div', {}, [h('h1', { text: 'Mehr' })])]));
@@ -64,8 +66,26 @@ export function render(root) {
     switchRow('Wochenziel', 'Trainings pro Woche für den Ring auf dem Startbildschirm', goalIn),
   ]));
 
+  // Deload-Woche: bis Sonntag 23:59 der laufenden Woche
+  const deloadBtn = h('button.btn.sm' + (deloadActive() ? '.danger' : '.ghost'), { text: deloadActive() ? 'Beenden' : 'Starten', onclick: () => {
+    if (deloadActive()) { updateSettings({ deloadUntil: 0 }); toast('Deload-Woche beendet'); }
+    else { const end = weekKey(Date.now()) + 7 * 86400000 - 1; updateSettings({ deloadUntil: end }); toast('Deload-Woche bis Sonntag: −15 % Gewicht, ein Satz weniger'); }
+    navigate('/settings', true);
+  } });
+  const volMin = h('input.input.num', { type: 'number', inputmode: 'numeric', value: s.volumeMin ?? 10, min: 1, max: 40, style: { width: '64px' } });
+  const volMax = h('input.input.num', { type: 'number', inputmode: 'numeric', value: s.volumeMax ?? 20, min: 1, max: 60, style: { width: '64px' } });
+  const commitVol = () => { const a = parseInt(volMin.value, 10), b = parseInt(volMax.value, 10); if (a > 0 && b >= a) updateSettings({ volumeMin: a, volumeMax: b }); };
+  volMin.addEventListener('change', commitVol); volMax.addEventListener('change', commitVol);
+  const sexSeg = h('div.seg', { style: { width: '130px' } }, [['m', 'Mann'], ['f', 'Frau']].map(([v, l]) => h('button', { text: l, class: (s.sex || 'm') === v ? 'active' : '', onclick: (e) => {
+    updateSettings({ sex: v }); for (const x of e.target.parentNode.children) x.classList.toggle('active', x.textContent === l);
+  } })));
+
   root.append(h('div.subhead', {}, [h('h2', { text: 'Training' })]));
   root.append(h('div.card', {}, [
+    switchRow('Deload-Woche', deloadActive() ? `Aktiv bis ${fmtDate(s.deloadUntil)} – Gewichte −15 %, ein Satz weniger` : 'Eine Woche leichter trainieren: −15 % Gewicht, ein Satz weniger, Progression pausiert', deloadBtn),
+    switchRow('Volumen-Ziel', 'Sätze je Muskelgruppe und Woche (Körperkarte und Balken färben sich danach)', h('div.row', { style: { gap: '6px' } }, [volMin, h('span.faint', { text: '–' }), volMax])),
+    switchRow('Kraftstandards', 'Vergleichswerte auf der Übungsseite (relativ zum Körpergewicht)', sexSeg),
+    switchRow('Sprachansagen', 'Sagt „Pause vorbei“ und den nächsten Satz an – fürs Handy in der Hosentasche', toggle('speech')),
     switchRow('Standard-Pause', 'Sekunden zwischen Sätzen, falls die Übung keine eigene Pause hat', rest),
     switchRow('Pausentimer automatisch', 'Startet nach jedem abgehakten Satz', toggle('autoRestTimer')),
     switchRow('Timer bei gesperrtem Bildschirm', 'Hält per lautlosem Audio die Verbindung – der Beep klingelt auch, wenn das Display aus ist', toggle('keepAliveAudio')),
@@ -122,6 +142,7 @@ export function render(root) {
       h('button.btn.ghost', { text: 'Sicherung exportieren', onclick: exportBackup }),
       h('button.btn.ghost', { text: 'Sicherung einspielen', onclick: () => fileIn.click() }),
     ]),
+    h('button.btn.ghost.block', { text: 'Alle Sätze als CSV (Excel/Numbers)', style: { marginTop: '10px' }, onclick: exportCSV }),
     fileIn,
     h('button.btn.danger.block.mt', { text: 'Alle Daten löschen', onclick: async () => {
       if (await confirmSheet({ title: 'Wirklich alles löschen?', text: 'Pläne, Workouts und Einstellungen werden unwiderruflich entfernt.', okLabel: 'Alles löschen', danger: true })) {
@@ -130,13 +151,90 @@ export function render(root) {
     } }),
   ]));
 
-  // ---------- Installation ----------
+  // ---------- Cloud-Backup (GitHub Gist) ----------
+  root.append(h('div.subhead', {}, [h('h2', { text: 'Cloud-Backup' })]));
+  const tokenIn = h('input.input', { type: 'password', value: s.gistToken || '', placeholder: 'ghp_… oder github_pat_…', autocomplete: 'off', autocapitalize: 'off', spellcheck: false });
+  tokenIn.addEventListener('change', () => updateSettings({ gistToken: tokenIn.value.trim() }));
+  const cloudStatus = h('p.small.faint.mt');
+  const drawCloudStatus = () => {
+    const c = getSettings();
+    cloudStatus.textContent = c.cloudLastError ? `Letzter Fehler: ${c.cloudLastError}`
+      : c.cloudLastSync ? `Zuletzt synchronisiert: ${fmtDate(c.cloudLastSync, { time: true })}` : 'Noch nicht synchronisiert.';
+  };
+  drawCloudStatus();
+  const busy = async (btn, label, fn) => {
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = label;
+    try { await fn(); } catch (e) { toast('Fehler: ' + e.message, { duration: 5000 }); }
+    finally { btn.disabled = false; btn.textContent = orig; drawCloudStatus(); }
+  };
+  const pushBtn = h('button.btn.ghost', { text: 'Jetzt hochladen', onclick: () => busy(pushBtn, 'Lade hoch …', async () => {
+    updateSettings({ gistToken: tokenIn.value.trim() });
+    await cloudPush();
+  }) });
+  const pullBtn = h('button.btn.ghost', { text: 'Wiederherstellen', onclick: () => busy(pullBtn, 'Hole …', async () => {
+    updateSettings({ gistToken: tokenIn.value.trim() });
+    const ok = await confirmSheet({ title: 'Aus der Cloud wiederherstellen', text: 'Die Sicherung wird mit den lokalen Daten zusammengeführt – nichts wird gelöscht.', okLabel: 'Zusammenführen' });
+    if (!ok) return;
+    const r = await cloudPull();
+    toast(`${r.plans} Pläne, ${r.sessions} Workouts aus der Cloud übernommen`);
+  }) });
+  root.append(h('div.card', {}, [
+    h('p.small.muted', { html: 'Sichert deine Daten in einem <b>privaten GitHub-Gist</b> – automatisch nach jedem Workout, und auf einem neuen iPhone reicht der Token zum Wiederherstellen. Token anlegen: <a href="https://github.com/settings/tokens/new?scopes=gist&description=Hantel" target="_blank" rel="noopener">github.com → Token mit Scope „gist“</a>. Der Token bleibt nur auf diesem Gerät.' }),
+    h('div.field.mt', {}, [h('label', { text: 'GitHub-Token' }), tokenIn]),
+    switchRow('Automatisch sichern', 'Nach Workouts, Plan- und Körperänderungen (mit ein paar Sekunden Verzögerung)', toggle('cloudAutoSync')),
+    h('div.grid-2', {}, [pushBtn, pullBtn]),
+    cloudStatus,
+  ]));
+
+  // ---------- Trainingstage → Kalender ----------
+  root.append(h('div.subhead', {}, [h('h2', { text: 'Trainingstage' })]));
+  const days = new Set(s.trainingDays || []);
+  const byDay = { ...(s.trainingPlanByDay || {}) };
+  const planSel = h('div.stack', { style: { marginTop: '10px', gap: '8px' } });
+  const drawPlanSel = () => {
+    planSel.innerHTML = '';
+    for (const d of [1, 2, 3, 4, 5, 6, 0].filter(d => days.has(d))) {
+      const sel = h('select.input', { style: { minHeight: '40px', padding: '6px 10px' } }, [
+        h('option', { value: '', text: 'Nach Erholung / Reihenfolge', selected: !byDay[d] }),
+        ...getPlans().map(p => h('option', { value: p.id, text: p.name, selected: byDay[d] === p.id })),
+      ]);
+      sel.addEventListener('change', () => { if (sel.value) byDay[d] = sel.value; else delete byDay[d]; updateSettings({ trainingPlanByDay: byDay }); });
+      planSel.append(h('div.row', { style: { gap: '10px' } }, [h('span', { text: WEEKDAYS_DE[d], style: { width: '28px', fontWeight: 700 } }), sel]));
+    }
+  };
+  const dayRow = h('div.day-row', {}, [1, 2, 3, 4, 5, 6, 0].map(d => h('button.chip' + (days.has(d) ? '.on' : ''), { text: WEEKDAYS_DE[d], onclick: (e) => {
+    if (days.has(d)) days.delete(d); else days.add(d);
+    e.target.classList.toggle('on', days.has(d));
+    updateSettings({ trainingDays: [...days] }); drawPlanSel();
+  } })));
+  drawPlanSel();
+  const timeIn = h('input.input', { type: 'time', value: s.trainingTime || '18:00', style: { width: '120px', minHeight: '40px' } });
+  timeIn.addEventListener('change', () => updateSettings({ trainingTime: timeIn.value || '18:00' }));
+  root.append(h('div.card', {}, [
+    h('p.small.muted', { text: 'Wähle deine Gym-Tage. Daraus wird ein Kalender-Abo mit Erinnerung 30 Minuten vorher – der Termin landet über „Teilen“ direkt im Apple-Kalender.' }),
+    h('div.mt', {}, [dayRow]),
+    planSel,
+    h('div.row.between.mt', {}, [h('span.small.muted', { text: 'Uhrzeit' }), timeIn]),
+    h('button.btn.ghost.block.mt', { html: svgIcon.calendar + '<span>Termine in den Kalender</span>', onclick: exportICS }),
+  ]));
+
+  // ---------- Installation & Siri ----------
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const startUrl = location.origin + location.pathname + '?action=start';
   root.append(h('div.subhead', {}, [h('h2', { text: 'App installieren' })]));
   root.append(h('div.card', {}, [
     standalone
       ? h('p.small.muted', { text: 'Hantel läuft als installierte App.' })
       : h('p.small.muted', { html: 'Auf dem iPhone in Safari: <b>Teilen</b> (Quadrat mit Pfeil) → <b>Zum Home-Bildschirm</b>. Danach startet Hantel wie eine normale App – auch offline.' }),
+    h('div.mt', {}, [
+      h('div', { text: 'Siri-Kurzbefehl „Training starten“', style: { fontWeight: 600 } }),
+      h('p.small.muted', { html: 'Kurzbefehle-App → neuer Kurzbefehl → Aktion <b>„URL öffnen“</b> mit dieser Adresse. Sag dann „Hey Siri, Training starten“ – Hantel öffnet das heutige Training.' }),
+      h('div.row', { style: { gap: '8px', marginTop: '6px' } }, [
+        h('code.kbd.truncate', { text: startUrl, style: { flex: '1', padding: '8px 10px' } }),
+        h('button.btn.sm.ghost', { text: 'Kopieren', onclick: async () => { try { await navigator.clipboard.writeText(startUrl); toast('Adresse kopiert'); } catch { toast('Kopieren nicht möglich – Adresse markieren'); } } }),
+      ]),
+      h('p.small.faint', { style: { marginTop: '6px' }, text: 'Mit ?action=timer öffnet sich stattdessen der Timer.' }),
+    ]),
     h('p.small.faint.mt', { text: `Hantel ${APP_VERSION}` }),
   ]));
 }

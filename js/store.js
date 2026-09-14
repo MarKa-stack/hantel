@@ -21,7 +21,27 @@ const DEFAULT_SETTINGS = {
   name: '',             // Vorname für die Begrüßung auf dem Startbildschirm
   lastBackupAt: 0,      // Zeitpunkt der letzten Sicherung (Export)
   lastBackupSessions: 0, // Anzahl Workouts zum Zeitpunkt der letzten Sicherung (Erinnerung alle 10)
+  gistToken: '',        // GitHub-Token (Scope gist) für das Cloud-Backup – nie exportiert
+  gistId: '',           // Gist, das die Sicherung hält
+  cloudAutoSync: true,  // nach Workouts/Planänderungen automatisch hochladen
+  cloudLastSync: 0,
+  cloudLastError: '',
+  deloadUntil: 0,       // Deload-Woche aktiv bis (Zeitstempel); startWorkout reduziert dann Gewicht/Sätze
+  volumeMin: 10,        // Ziel-Sätze je Muskelgruppe und Woche (Untergrenze)
+  volumeMax: 20,        // … Obergrenze
+  sex: 'm',             // für Kraftstandards ('m' | 'f')
+  speech: false,        // Sprachansagen (Pause vorbei, nächster Satz)
+  trainingDays: [],     // Wochentage fürs Kalender-Export (0 = So … 6 = Sa)
+  trainingTime: '18:00',
+  trainingPlanByDay: {}, // optional fester Plan je Wochentag (für den Kalender)
+  milestonesSeen: [],   // bereits gezeigte Meilensteine
 };
+
+/** Einstellungen ohne Geheimnisse (für Export/Cloud) */
+function publicSettings() {
+  const { apiKey, gistToken, ...rest } = state.settings;
+  return rest;
+}
 
 const state = {
   plans: [],
@@ -30,6 +50,7 @@ const state = {
   settings: { ...DEFAULT_SETTINGS },
   exerciseSettings: {}, // je Übung (normalisierter Name): { setup, barWeight }
   body: [],             // Körpergewicht/Maße: { id, date, weight, waist, chest, arm, thigh, note }
+  customExercises: [],  // eigene Übungen: { id, name, primary, secondary, weightStep, barbell, tips, aliases }
 };
 
 const listeners = new Set();
@@ -50,6 +71,7 @@ export function load() {
       state.settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
       state.exerciseSettings = data.exerciseSettings || {};
       state.body = data.body || [];
+      state.customExercises = data.customExercises || [];
     }
   } catch (e) {
     console.error('Konnte Daten nicht laden', e);
@@ -68,6 +90,7 @@ export function save(immediate = false) {
         settings: state.settings,
         exerciseSettings: state.exerciseSettings,
         body: state.body,
+        customExercises: state.customExercises,
         savedAt: Date.now(),
       }));
     } catch (e) {
@@ -164,22 +187,32 @@ export function movePlan(id, dir) {
 
 export function getActiveWorkout() { return state.activeWorkout; }
 
+export function deloadActive() {
+  return !!state.settings.deloadUntil && state.settings.deloadUntil > Date.now();
+}
+
 export function startWorkout(planId) {
   const plan = getPlan(planId);
   if (!plan) return null;
+  const deload = deloadActive();
   const entries = plan.exercises.map(ex => {
     const rec = recommend(ex);
     const last = rec.last?.entry || null;
-    const n = Math.max(1, ex.sets || 1);
+    const step = weightStepFor(ex);
+    // Deload-Woche: −15 % Gewicht, ein Satz weniger
+    const n = Math.max(1, (ex.sets || 1) - (deload ? 1 : 0));
     const sets = [];
     for (let i = 0; i < n; i++) {
       const prev = last?.sets[i] || last?.sets[last.sets.length - 1] || null;
       // Gewicht: Empfehlung (Double Progression); Wdh: bei Gewichtserhöhung unteres Ende des Bereichs, sonst wie zuletzt
-      const weight = rec.weight ?? prev?.weight ?? ex.weight ?? null;
-      const reps = rec.status === 'increase'
+      let weight = rec.weight ?? prev?.weight ?? ex.weight ?? null;
+      if (deload && weight != null) weight = Math.max(step, Math.round((weight * 0.85) / step) * step);
+      const reps = rec.status === 'increase' && !deload
         ? (rec.reps?.min ?? repsToNumber(ex.reps) ?? null)
         : (prev?.reps ?? rec.reps?.min ?? repsToNumber(ex.reps) ?? null);
-      sets.push({ reps, weight, done: false });
+      const set = { reps, weight, done: false };
+      if (ex.amrapLast && i === n - 1 && !deload) set.type = 'amrap'; // letzter Satz bis zum Muskelversagen
+      sets.push(set);
     }
     return {
       exerciseId: ex.id,
@@ -204,6 +237,7 @@ export function startWorkout(planId) {
     currentIndex: 0,
     entries,
     note: '',
+    deload,
   };
   save(true);
   emit('workout');
@@ -384,9 +418,10 @@ export function exportJSON() {
     exportedAt: new Date().toISOString(),
     plans: state.plans,
     sessions: state.sessions,
-    settings: { ...state.settings, apiKey: '' }, // API-Key nie exportieren
+    settings: publicSettings(), // API-Key und Cloud-Token nie exportieren
     exerciseSettings: state.exerciseSettings,
     body: state.body,
+    customExercises: state.customExercises,
   }, null, 2);
 }
 
@@ -404,7 +439,8 @@ export function importJSON(text, { merge = true } = {}) {
   for (const s of data.sessions || []) if (!sessionIds.has(s.id)) { state.sessions.push(s); sessions++; }
   state.sessions.sort((a, b) => a.startedAt - b.startedAt);
   if (data.settings) {
-    const { apiKey, ...rest } = data.settings;
+    // Geheimnisse und Geräte-Zustand des anderen Geräts nicht übernehmen
+    const { apiKey, gistToken, gistId, cloudLastSync, cloudLastError, ...rest } = data.settings;
     Object.assign(state.settings, rest);
   }
   if (data.exerciseSettings) Object.assign(state.exerciseSettings, data.exerciseSettings);
@@ -413,9 +449,31 @@ export function importJSON(text, { merge = true } = {}) {
     for (const b of data.body) if (!ids.has(b.id)) state.body.push(b);
     state.body.sort((a, b) => a.date - b.date);
   }
+  if (Array.isArray(data.customExercises)) {
+    const ids = new Set(state.customExercises.map(c => c.id));
+    for (const c of data.customExercises) if (!ids.has(c.id)) state.customExercises.push(c);
+  }
   save(true);
-  emit('plans'); emit('sessions'); emit('settings'); emit('body');
+  emit('plans'); emit('sessions'); emit('settings'); emit('body'); emit('custom');
   return { plans, sessions };
+}
+
+// ---------- Eigene Übungen ----------
+
+export function getCustomExercises() { return state.customExercises; }
+
+export function saveCustomExercise(ex) {
+  const i = state.customExercises.findIndex(c => c.id === ex.id);
+  if (i >= 0) state.customExercises[i] = ex; else state.customExercises.push({ id: uid(), ...ex });
+  save();
+  emit('custom');
+  return ex;
+}
+
+export function deleteCustomExercise(id) {
+  state.customExercises = state.customExercises.filter(c => c.id !== id);
+  save();
+  emit('custom');
 }
 
 export function resetAll() {
@@ -424,6 +482,7 @@ export function resetAll() {
   state.activeWorkout = null;
   state.exerciseSettings = {};
   state.body = [];
+  state.customExercises = [];
   state.settings = { ...DEFAULT_SETTINGS };
   save(true);
   emit('plans'); emit('sessions'); emit('settings'); emit('workout');

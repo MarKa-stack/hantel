@@ -73,6 +73,11 @@ export function render(root, { params, navigate }) {
         h('div.grow', {}, [h('div.lbl', { text: 'Supersatz mit der nächsten Übung' }), h('div.desc', { text: 'Im Training: A → B ohne Pause, Pausentimer erst nach B' })]),
         h('label.toggle', {}, [superIn, h('span')]),
       ]);
+      const amrapIn = h('input', { type: 'checkbox', checked: !!draft.amrapLast });
+      const amrapRow = h('div.switch', {}, [
+        h('div.grow', {}, [h('div.lbl', { text: 'Letzter Satz AMRAP' }), h('div.desc', { text: 'So viele Wiederholungen wie möglich – bestes e1RM, schärfere Progression' })]),
+        h('label.toggle', {}, [amrapIn, h('span')]),
+      ]);
 
       const save = () => {
         const n = name.value.trim();
@@ -84,6 +89,7 @@ export function render(root, { params, navigate }) {
         draft.restSec = parseInt(rest.value, 10) || null;
         draft.weightStep = parseNum(stepSel.value);
         draft.superset = superIn.checked;
+        draft.amrapLast = amrapIn.checked;
         draft.note = note.value.trim();
         if (isNew) plan.exercises.push(draft);
         else Object.assign(ex, draft);
@@ -112,6 +118,7 @@ export function render(root, { params, navigate }) {
           h('div.field', {}, [h('label', { text: 'Gewichtsschritt (Progression)' }), stepSel]),
           h('div.field', {}, [h('label', { text: 'Notiz' }), note]),
           superRow,
+          amrapRow,
         ]),
         !isNew ? h('div.row.mt', {}, [
           h('button.btn.sm.ghost.grow', { text: '↑ Nach oben', onclick: () => move(-1), disabled: idx <= 0 }),
