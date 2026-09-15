@@ -135,3 +135,22 @@ export function setEquipmentPhoto(type, dataUrl) {
   catch { delete p[type]; throw new Error('Speicher voll – erst andere Gerätefotos löschen.'); }
 }
 export function equipmentPhotoCount() { return Object.keys(loadPhotos()).length; }
+
+// ---------- Mitgelieferte Fotos (Wikimedia Commons, freie Lizenzen) ----------
+// Beispielbilder, wie das Gerät typischerweise aussieht; ein eigenes Foto aus dem Studio hat Vorrang.
+export const PHOTOS = {
+  lat_pulldown: { file: 'img/equip/lat_pulldown.jpg', title: 'Back Pull down', author: 'Aliva Sahoo', license: 'CC BY-SA 4.0', url: 'https://commons.wikimedia.org/wiki/File:Back_Pull_down.jpg' },
+  cable_tower: { file: 'img/equip/cable_tower.jpg', title: 'Functional Trainer Exercise Machine at Gym', author: 'KeepActive Australia', license: 'CC BY-SA 4.0', url: 'https://commons.wikimedia.org/wiki/File:Functional_Trainer_Exercise_Machine_at_Gym.jpg' },
+  cable_crossover: { file: 'img/equip/cable_crossover.jpg', title: 'Székesfehérvár, Cutler Gym, Combined cable machine', author: 'Teemeah', license: 'CC BY-SA 4.0', url: 'https://commons.wikimedia.org/wiki/File:Sz%C3%A9kesfeh%C3%A9rv%C3%A1r,_Cutler_Gym,_Combined_cable_machine.jpg' },
+  chest_press: { file: 'img/equip/chest_press.jpg', title: 'Chest Incline', author: 'Aliva Sahoo', license: 'CC BY-SA 4.0', url: 'https://commons.wikimedia.org/wiki/File:Chest_Incline.jpg' },
+  leg_press: { file: 'img/equip/leg_press.jpg', title: 'Infimetrische Beinpresse (i-B6)', author: 'Lokverführer', license: 'CC BY-SA 4.0', url: 'https://commons.wikimedia.org/wiki/File:Infimetrische_Beinpresse_(i-B6).jpg' },
+  leg_extension: { file: 'img/equip/leg_extension.jpg', title: 'LegExx Regular Leg Extension2', author: 'OriginalFlywheel', license: 'CC BY-SA 4.0', url: 'https://commons.wikimedia.org/wiki/File:LegExx_Regular_Leg_Extension2.jpg' },
+  seated_row_cable: { file: 'img/equip/seated_row_cable.jpg', title: 'Woman using a seated cable row machine at the gym', author: 'Miguel Angel Omaña Rojas', license: 'CC0', url: 'https://commons.wikimedia.org/wiki/File:Woman_using_a_seated_cable_row_machine_at_the_gym.jpg' },
+  incline_bench: { file: 'img/equip/incline_bench.jpg', title: 'Incline bench', author: 'Teemeah', license: 'CC BY-SA 4.0', url: 'https://commons.wikimedia.org/wiki/File:Incline_bench.jpg' },
+  hack_squat: { file: 'img/equip/hack_squat.jpg', title: 'HackSquatMachineExercise', author: 'GeorgeStepanek', license: 'CC BY-SA 3.0', url: 'https://commons.wikimedia.org/wiki/File:HackSquatMachineExercise.JPG' },
+  pec_deck: { file: 'img/equip/pec_deck.jpg', title: "Lee Priest Sam's Fitness Pec Fly", author: "Sam's Fitness - Gym Equipment", license: 'CC BY 3.0', url: 'https://commons.wikimedia.org/wiki/File:Lee_Priest_Sam%27s_Fitness_Pec_Fly.jpg' },
+  dumbbells: { file: 'img/equip/dumbbells.jpg', title: 'A close-up view of a set of heavy dumbbells', author: 'Shixart1985', license: 'CC BY 2.0', url: 'https://commons.wikimedia.org/wiki/File:A_close-up_view_of_a_set_of_heavy_dumbbells.jpg' },
+  barbell: { file: 'img/equip/barbell.jpg', title: 'Barbell at FIBO 2019 in Cologne, Germany', author: 'dronepicr', license: 'CC BY 2.0', url: 'https://commons.wikimedia.org/wiki/File:Barbell_at_FIBO_2019_in_Cologne,_Germany_(47952426067).jpg' },
+};
+/** Mitgeliefertes Beispielfoto zum Gerätetyp (oder null) */
+export function equipmentStockPhoto(type) { return PHOTOS[type] || null; }

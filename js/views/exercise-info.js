@@ -2,7 +2,7 @@
 import { h, openSheet, shrinkImage, toast } from '../util.js';
 import { findExercise, exerciseFigure } from '../exercise-db.js';
 import { findCustomExercise, MUSCLE_NAME } from '../muscles.js';
-import { EQUIPMENT, equipmentSvg, equipmentPhoto, setEquipmentPhoto } from '../equipment.js';
+import { EQUIPMENT, equipmentSvg, equipmentPhoto, setEquipmentPhoto, equipmentStockPhoto } from '../equipment.js';
 
 /**
  * @param {string} name Übungsname (wie im Plan)
@@ -31,8 +31,10 @@ export function openExerciseInfo(name, opts = {}) {
         const drawHero = () => {
           eqHero.innerHTML = '';
           const photo = equipmentPhoto(e.equip.type);
-          if (photo) eqHero.append(h('img.equip-photo', { src: photo, alt: eq.name }));
-          else eqHero.innerHTML = equipmentSvg(e.equip.type);
+          const stock = equipmentStockPhoto(e.equip.type);
+          if (photo) eqHero.append(h('img.equip-photo', { src: photo, alt: eq.name }), h('div.equip-cap', { text: 'Dein Studio' }));
+          else if (stock) eqHero.append(h('img.equip-photo', { src: stock.file, alt: eq.name, loading: 'lazy' }), h('div.equip-cap', {}, [h('span', { text: 'Beispielbild · ' }), h('a', { href: stock.url, target: '_blank', rel: 'noopener', text: `${stock.author}, ${stock.license}` })]));
+          else { eqHero.innerHTML = equipmentSvg(e.equip.type); eqHero.append(h('div.equip-cap', { text: 'Schema – kein freies Foto verfügbar' })); }
           eqHero.append(h('div.equip-photo-btns', {}, [
             h('button.btn.sm' + (photo ? '.ghost' : ''), { text: photo ? 'Foto ändern' : 'Foto aus deinem Studio', onclick: () => file.click() }),
             photo ? h('button.btn.sm.ghost', { text: 'Entfernen', onclick: () => { setEquipmentPhoto(e.equip.type, null); drawHero(); } }) : null,

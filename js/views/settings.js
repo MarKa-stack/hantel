@@ -2,11 +2,12 @@
 import { h, svgIcon, toast, confirmSheet, fmtDate, isIOS, weekKey } from '../util.js';
 import { getSettings, updateSettings, importJSON, resetAll, getSessions, getPlans, deloadActive } from '../store.js';
 import { PROVIDERS, testConnection, listModels } from '../llm.js';
+import { PHOTOS, EQUIPMENT } from '../equipment.js';
 import { exportBackup } from '../backup.js';
 import { cloudPush, cloudPull } from '../cloud.js';
 import { exportCSV, exportICS, WEEKDAYS_DE } from '../exporters.js';
 
-export const APP_VERSION = '1.16.0';
+export const APP_VERSION = '1.17.0';
 
 export function render(root, { navigate }) {
   const s = getSettings();
@@ -295,6 +296,14 @@ export function render(root, { navigate }) {
         h('button.btn.sm.ghost', { text: 'Kopieren', onclick: async () => { try { await navigator.clipboard.writeText(startUrl); toast('Adresse kopiert'); } catch { toast('Kopieren nicht möglich – Adresse markieren'); } } }),
       ]),
       h('p.small.faint', { style: { marginTop: '6px' }, text: 'Mit ?action=timer öffnet sich stattdessen der Timer.' }),
+    ]),
+    // Bildnachweise für die mitgelieferten Gerätefotos (Wikimedia Commons)
+    h('details.credits.mt', {}, [
+      h('summary', { text: 'Bildnachweise (Gerätefotos)' }),
+      h('ul.small.faint', {}, Object.entries(PHOTOS).map(([k, p]) => h('li', {}, [
+        h('b', { text: EQUIPMENT[k]?.name || k }), h('span', { text: ': ' }),
+        h('a', { href: p.url, target: '_blank', rel: 'noopener', text: `„${p.title}“` }), h('span', { text: ` – ${p.author}, ${p.license}, via Wikimedia Commons (verkleinert)` }),
+      ]))),
     ]),
     h('p.small.faint.mt', { text: `Hantel ${APP_VERSION}` }),
   ]));

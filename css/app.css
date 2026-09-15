@@ -1426,3 +1426,10 @@ h1 { font-size: 32px; letter-spacing: -0.035em; }
 .set-table { background: color-mix(in srgb, var(--surface) 85%, var(--surface-2)); }
 .st-row { border-top-color: color-mix(in srgb, var(--border) 60%, transparent); }
 .wk-nav { background: color-mix(in srgb, var(--bg) 84%, transparent); border-top: 0; }
+.equip-cap { font-size: 11px; color: var(--text-3); margin-top: 6px; text-align: center; }
+.equip-cap a { color: var(--text-3); text-decoration: underline; }
+.equip-photo { max-height: 300px; }
+details.credits summary { font-size: 13px; color: var(--text-3); cursor: pointer; }
+details.credits ul { padding-left: 16px; margin: 6px 0 0; }
+details.credits li { margin-bottom: 4px; line-height: 1.35; }
+details.credits a { color: var(--text-2); }
