@@ -1,4 +1,4 @@
-// Trainingsmodus: eine Übung pro Seite, Übungsleiste oben, Satztabelle (Nr · kg · Wdh · RIR · Haken), letztes Training + Empfehlung, PR-Erkennung
+// Trainingsmodus: eine Übung pro Seite, Fortschrittsleiste oben, Satztabelle (Nr · kg · Wdh · RIR · Haken), letztes Training + Empfehlung, PR-Erkennung
 import { h, svgIcon, fmtDuration, fmtNum, fmtShortDate, confirmSheet, openSheet, promptSheet, actionSheet, toast, haptic, parseNum, countUp, escapeHtml } from '../util.js';
 import { getActiveWorkout, touchWorkout, finishWorkout, cancelWorkout, getSettings, sessionVolume, getExerciseSettings, updateExerciseSettings, getSessions } from '../store.js';
 import { restTimer, unlockAudio, keepAlive, setWakeLockWanted } from '../timer.js';
@@ -79,19 +79,13 @@ export function render(root, { navigate }) {
   const nav = h('div.wk-nav');
   root.append(nav);
 
-  // Übungsleiste: ein Bildchen pro Übung (erledigt = Haken, aktuell = Akzent), tippen springt
+  // Fortschrittsleiste: ein Segment pro Übung (erledigt = grün, aktuell = Akzent) – blättern über „Weiter“
   const drawProgress = () => {
     progressEl.innerHTML = '';
     w.entries.forEach((e, i) => {
       const allDone = e.sets.length && e.sets.every(s => s.done);
-      const doneN = e.sets.filter(s => s.done).length;
-      progressEl.append(h('button.wk-strip-item' + (i === w.currentIndex ? '.cur' : allDone ? '.done' : ''), { 'aria-label': e.name, title: e.name, onclick: () => go(i) }, [
-        figureThumb(e.name) || h('div.idx', { text: String(i + 1) }),
-        allDone ? h('span.badge', { html: svgIcon.check }) : doneN ? h('span.badge.part', { text: `${doneN}/${e.sets.length}` }) : null,
-      ]));
+      progressEl.append(h('i', { class: i === w.currentIndex ? 'cur' : allDone ? 'done' : '' }));
     });
-    // Aktuelle Übung ins Bild holen
-    requestAnimationFrame(() => progressEl.querySelector('.cur')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }));
   };
 
   const drawNav = () => {

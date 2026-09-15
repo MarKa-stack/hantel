@@ -5,7 +5,7 @@
 // 180° = nach oben, -90° = nach hinten. Die Figur schaut nach rechts.
 // Frontansicht: 0° = nach unten, 90° = nach rechts (Bildschirm), -90° = nach links.
 
-const L = { neck: 7, headR: 8, torso: 36, uarm: 22, farm: 20, thigh: 30, shin: 30, foot: 11 };
+const L = { neck: 7, headR: 9, torso: 36, uarm: 22, farm: 20, thigh: 30, shin: 30, foot: 11 };
 
 const rad = (d) => (d * Math.PI) / 180;
 function pt(from, len, a) { return [from[0] + len * Math.sin(rad(a)), from[1] + len * Math.cos(rad(a))]; }
@@ -57,30 +57,48 @@ export function joints(pose, view) {
 
 function P(...pts) { return pts.map((p, i) => (i ? 'L' : 'M') + f(p[0]) + ' ' + f(p[1])).join(' '); }
 
+/** Konische Kapsel zwischen A (Halbbreite wa) und B (Halbbreite wb) – gleiche Befehlsfolge in jeder Pose, damit SMIL interpoliert */
+function capsule(a, b, wa, wb) {
+  let dx = b[0] - a[0], dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len; // Normale
+  const p = (x, y) => f(x) + ' ' + f(y);
+  return `M${p(a[0] + nx * wa, a[1] + ny * wa)} L${p(b[0] + nx * wb, b[1] + ny * wb)} A${wb} ${wb} 0 0 1 ${p(b[0] - nx * wb, b[1] - ny * wb)} L${p(a[0] - nx * wa, a[1] - ny * wa)} A${wa} ${wa} 0 0 1 ${p(a[0] + nx * wa, a[1] + ny * wa)} Z`;
+}
+
+// Halbbreiten der Körperteile (Seitenansicht): Rumpf verjüngt sich zur Hüfte, Gliedmaßen zum Ende hin
+const W = { torsoSh: 7.5, torsoHip: 6, neck: 3, uarm: 4, elb: 3.2, farm: 3, wr: 2.2, thigh: 5.2, knee: 3.8, shin: 3.4, ank: 2.4, foot: 2.2 };
+
 /**
- * Körper als Segmente mit eigener Strichstärke (Rumpf breit, Oberarm/Oberschenkel kräftiger als Unterarm/Unterschenkel),
- * damit die Figur Volumen bekommt statt nur Striche. Hintere Gliedmaßen (Seitenansicht) heller.
+ * Körper als konische Kapseln (Rumpf, Hals, Ober-/Unterarm, Ober-/Unterschenkel, Fuß).
+ * Hintere Gliedmaßen (Seitenansicht) werden zuerst und heller gezeichnet.
  * @returns {{c:string, d:string, back?:boolean}[]}
  */
 function bodySegments(j, view) {
+  const seg = (c, a, b, wa, wb, back = false) => ({ c, d: capsule(a, b, wa, wb), back });
   if (view === "top") {
-    return [{ c: 'shoulders', d: P(j.shL, j.shR) }, { c: 'uarm', d: P(j.shL, j.elbL, j.wrL) }, { c: 'uarm', d: P(j.shR, j.elbR, j.wrR) }];
+    return [
+      seg('torso', j.shL, j.shR, 4.5, 4.5),
+      seg('uarm', j.shL, j.elbL, W.uarm, W.elb), seg('farm', j.elbL, j.wrL, W.farm, W.wr),
+      seg('uarm', j.shR, j.elbR, W.uarm, W.elb), seg('farm', j.elbR, j.wrR, W.farm, W.wr),
+    ];
   }
   if (view === "front") {
     return [
-      { c: 'neck', d: P(j.sh, j.head) }, { c: 'torso', d: P(j.sh, j.hip) }, { c: 'shoulders', d: P(j.shL, j.shR) }, { c: 'hips', d: P(j.hipL, j.hipR) },
-      { c: 'thigh', d: P(j.hipL, j.kneeL) }, { c: 'shin', d: P(j.kneeL, j.ankL) },
-      { c: 'thigh', d: P(j.hipR, j.kneeR) }, { c: 'shin', d: P(j.kneeR, j.ankR) },
-      { c: 'uarm', d: P(j.shL, j.elbL) }, { c: 'farm', d: P(j.elbL, j.wrL) },
-      { c: 'uarm', d: P(j.shR, j.elbR) }, { c: 'farm', d: P(j.elbR, j.wrR) },
+      seg('neck', j.sh, j.head, W.neck, W.neck),
+      seg('torso', j.shL, j.shR, 5, 5), seg('torso', j.sh, j.hip, 9.5, 8), seg('torso', j.hipL, j.hipR, 4.5, 4.5),
+      seg('thigh', j.hipL, j.kneeL, W.thigh, W.knee), seg('shin', j.kneeL, j.ankL, W.shin, W.ank),
+      seg('thigh', j.hipR, j.kneeR, W.thigh, W.knee), seg('shin', j.kneeR, j.ankR, W.shin, W.ank),
+      seg('uarm', j.shL, j.elbL, W.uarm, W.elb), seg('farm', j.elbL, j.wrL, W.farm, W.wr),
+      seg('uarm', j.shR, j.elbR, W.uarm, W.elb), seg('farm', j.elbR, j.wrR, W.farm, W.wr),
     ];
   }
   return [
-    { c: 'thigh', d: P(j.hip, j.knee2), back: true }, { c: 'shin', d: P(j.knee2, j.ank2, j.toe2), back: true },
-    { c: 'uarm', d: P(j.sh, j.elb2), back: true }, { c: 'farm', d: P(j.elb2, j.wr2), back: true },
-    { c: 'neck', d: P(j.sh, j.head) }, { c: 'torso', d: P(j.hip, j.sh) },
-    { c: 'thigh', d: P(j.hip, j.knee) }, { c: 'shin', d: P(j.knee, j.ank, j.toe) },
-    { c: 'uarm', d: P(j.sh, j.elb) }, { c: 'farm', d: P(j.elb, j.wr) },
+    seg('thigh', j.hip, j.knee2, W.thigh, W.knee, true), seg('shin', j.knee2, j.ank2, W.shin, W.ank, true), seg('foot', j.ank2, j.toe2, W.ank, W.foot, true),
+    seg('uarm', j.sh, j.elb2, W.uarm, W.elb, true), seg('farm', j.elb2, j.wr2, W.farm, W.wr, true),
+    seg('neck', j.sh, j.head, W.neck, W.neck), seg('torso', j.hip, j.sh, W.torsoHip, W.torsoSh),
+    seg('thigh', j.hip, j.knee, W.thigh, W.knee), seg('shin', j.knee, j.ank, W.shin, W.ank), seg('foot', j.ank, j.toe, W.ank, W.foot),
+    seg('uarm', j.sh, j.elb, W.uarm, W.elb), seg('farm', j.elb, j.wr, W.farm, W.wr),
   ];
 }
 

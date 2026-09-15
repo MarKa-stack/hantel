@@ -532,17 +532,9 @@ details.raw pre { white-space: pre-wrap; font-size: 12px; color: var(--text-3); 
    Übungsfiguren (SVG-Strichfiguren)
    ------------------------------------------------------------------ */
 .figure { width: 100%; height: auto; display: block; }
-.figure .limb { fill: none; stroke: var(--text); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
-.figure .seg-torso { stroke-width: 12; }
-.figure .seg-neck { stroke-width: 5; }
-.figure .seg-shoulders { stroke-width: 9; }
-.figure .seg-hips { stroke-width: 9; }
-.figure .seg-thigh { stroke-width: 8; }
-.figure .seg-shin { stroke-width: 6; }
-.figure .seg-uarm { stroke-width: 7; }
-.figure .seg-farm { stroke-width: 5.5; }
-.figure .limb.back { stroke: var(--text-3); }
-.figure .head { fill: var(--text); }
+.figure .limb { fill: var(--text); stroke: var(--surface-2); stroke-width: 1.2; paint-order: stroke; stroke-linejoin: round; }
+.figure .limb.back { fill: color-mix(in srgb, var(--text) 55%, var(--surface-3)); }
+.figure .head { fill: var(--text); stroke: var(--surface-2); stroke-width: 1.2; paint-order: stroke; }
 .figure .frame { fill: var(--surface-3); }
 .figure .frame-line { fill: none; stroke: var(--surface-3); stroke-width: 3; stroke-linecap: round; }
 .figure .ground { stroke: var(--border); stroke-width: 2; stroke-linecap: round; }
@@ -1386,3 +1378,24 @@ h1 { font-size: 32px; letter-spacing: -0.035em; }
 .hero-card .btn.primary { background: #fff; color: #14171e; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
 .hero-card .btn.primary svg { fill: #14171e; }
 :root[data-theme="light"] .plan-card.art .btn.primary { color: #14171e; }
+
+/* ---------- Gerätebilder (1.15) ---------- */
+.equip-hero { background: var(--surface-2); border-radius: 14px; padding: 8px; }
+.equip-art { width: 100%; height: auto; max-height: 220px; display: block; }
+.equip-art .eq-frame { stroke: var(--text-3); stroke-linecap: round; }
+.equip-art .eq-floor { stroke: var(--border); stroke-width: 2; stroke-linecap: round; }
+.equip-art .eq-pad { fill: var(--accent); opacity: 0.9; }
+.equip-art .eq-metal { fill: color-mix(in srgb, var(--text-2) 70%, var(--surface-3)); }
+.equip-art .eq-cable { stroke: var(--text-2); stroke-width: 1.6; stroke-linecap: round; }
+.equip-art .eq-pulley { fill: var(--surface-3); stroke: var(--text-2); stroke-width: 1.5; }
+.equip-art .eq-stackbox { fill: var(--surface-3); }
+.equip-art .eq-plate { fill: color-mix(in srgb, var(--text-3) 60%, var(--surface-3)); }
+.equip-art .eq-label { fill: var(--text-3); font-size: 9px; font-family: var(--font); font-weight: 600; }
+.equip-name { font-weight: 700; font-size: 16px; margin-top: 10px; }
+.equip-line { display: grid; grid-template-columns: 96px 1fr; gap: 8px; margin-top: 8px; font-size: 14px; }
+.equip-line .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); padding-top: 2px; }
+.fig-hero { cursor: pointer; }
+.wk-progress { display: flex; gap: 4px; margin: 8px 0 0; padding: 0; overflow: visible; }
+.wk-progress i { display: block; flex: 1; height: 4px; border-radius: 2px; background: var(--surface-3); }
+.wk-progress i.done { background: var(--good); }
+.wk-progress i.cur { background: var(--accent); }
