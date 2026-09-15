@@ -3,11 +3,12 @@ import { h, svgIcon, toast, confirmSheet, fmtDate, isIOS, weekKey } from '../uti
 import { getSettings, updateSettings, importJSON, resetAll, getSessions, getPlans, deloadActive } from '../store.js';
 import { PROVIDERS, testConnection, listModels, aiReady } from '../llm.js';
 import { PHOTOS, EQUIPMENT } from '../equipment.js';
+import { ACCENTS } from '../theme.js';
 import { exportBackup } from '../backup.js';
 import { cloudPush, cloudPull } from '../cloud.js';
 import { exportCSV, exportICS, WEEKDAYS_DE } from '../exporters.js';
 
-export const APP_VERSION = '1.23.1';
+export const APP_VERSION = '1.24.0';
 
 const MORE_KEY = 'hantel.moreOpen';
 const moreOpen = new Set((() => { try { return JSON.parse(localStorage.getItem(MORE_KEY) || '[]'); } catch { return []; } })());
@@ -68,6 +69,10 @@ export function render(root, { navigate }) {
     updateSettings({ barWeight: b }); for (const x of e.target.parentNode.children) x.classList.toggle('active', x.textContent === String(b));
   } })));
 
+  // Akzentfarbe: Farbkreise, sofort sichtbar
+  const swatches = h('div.swatches', {}, Object.entries(ACCENTS).map(([k, a]) => h('button.swatch', { class: (s.accent || 'orange') === k ? 'on' : '', 'aria-label': a.name, title: a.name, style: `--sw: ${a.dark}`, onclick: () => {
+    updateSettings({ accent: k }); for (const b of swatches.children) b.classList.toggle('on', b.title === a.name);
+  } })));
   const themeSeg = h('div.seg', { style: { width: '200px' } }, [['dark', 'Dunkel'], ['light', 'Hell'], ['system', 'Auto']].map(([v, l]) => h('button', { text: l, class: (s.theme || 'dark') === v ? 'active' : '', onclick: (e) => {
     updateSettings({ theme: v }); for (const x of e.target.parentNode.children) x.classList.toggle('active', x.textContent === l);
   } })));
@@ -76,9 +81,10 @@ export function render(root, { navigate }) {
   const nameIn = h('input.input', { type: 'text', value: s.name || '', placeholder: 'Vorname', autocomplete: 'given-name', style: { width: '150px', minHeight: '42px' } });
   nameIn.addEventListener('change', () => updateSettings({ name: nameIn.value.trim() }));
 
-  out = section('look', 'Darstellung', 'Erscheinungsbild, Name, Wochenziel');
+  out = section('look', 'Darstellung', `Erscheinungsbild, Akzent ${ACCENTS[s.accent]?.name || 'Orange'}, Name, Wochenziel`);
   out.append(h('div.card', {}, [
     switchRow('Erscheinungsbild', 'Dunkel ist Standard – Hell oder automatisch nach System', themeSeg),
+    h('div.switch.col', {}, [h('div', {}, [h('div.lbl', { text: 'Akzentfarbe' }), h('div.desc', { text: 'Buttons, Tabs, Ringe und Hervorhebungen' })]), swatches]),
     switchRow('Dein Name', 'Für die Begrüßung auf dem Startbildschirm', nameIn),
     switchRow('Wochenziel', 'Trainings pro Woche für den Ring auf dem Startbildschirm', goalIn),
   ]));

@@ -8,6 +8,7 @@ import { shareSession } from '../share.js';
 import { milestonesReachedAt, allMilestones } from '../milestones.js';
 import { strengthStandard, LEVELS } from '../standards.js';
 import { openCustomExerciseEditor } from './custom-exercise.js';
+import { listPhotos } from '../photos.js';
 
 const LEVELS_LABEL = (i) => LEVELS[i];
 
@@ -198,6 +199,23 @@ function renderOverview(root, { navigate }) {
       h('div', { html: svgIcon.chevron }),
     ]),
   ]));
+
+  // Fortschrittsfotos (IndexedDB, asynchron: Karte füllt sich nach dem Laden)
+  const photoSub = h('div.small.faint', { text: 'Vorher/Nachher-Vergleich mit Schieberegler' });
+  const photoThumbs = h('div.photo-strip');
+  root.append(h('div.card.tappable.row-card', { onclick: () => navigate('/photos') }, [
+    h('div.row', {}, [
+      iconBox('camera', 'neutral'),
+      h('div.grow', {}, [h('b', { text: 'Fortschrittsfotos' }), photoSub]),
+      photoThumbs,
+      h('div', { html: svgIcon.chevron }),
+    ]),
+  ]));
+  listPhotos().then(ps => {
+    if (!ps.length) return;
+    photoSub.textContent = `${ps.length} Foto${ps.length === 1 ? '' : 's'} · zuletzt ${fmtShortDate(ps[ps.length - 1].date)}`;
+    for (const p of ps.slice(-3)) photoThumbs.append(h('img', { src: p.thumb, alt: '' }));
+  }).catch(() => {});
 
   // Rekorde & Meilensteine: eine Seite mit zwei Reitern
   const mstones = allMilestones();

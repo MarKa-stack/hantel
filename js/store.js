@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS = {
   proxyUsageAt: 0,
   photoConsent: false,  // Datenschutzhinweis zur Fotoanalyse bestätigt
   theme: 'dark',        // 'dark' | 'light' | 'system'
+  accent: 'orange',     // Akzentfarbe, siehe js/theme.js
   weeklyGoal: 4,        // Trainings pro Woche (Wochenring auf dem Startbildschirm)
   barWeight: 20,        // Standard-Stangengewicht für den Scheibenrechner
   bgTimerAudio: false, // Pausentimer bei gesperrtem Bildschirm per lautlosem Audio – pausiert die Musik-App, deshalb aus

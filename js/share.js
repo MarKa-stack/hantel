@@ -167,6 +167,7 @@ export async function renderShareCard(session) {
 
 /** Karte rendern und über das Share-Sheet teilen (Fallback: PNG-Download) */
 export async function shareSession(session) {
+  COLORS.accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ff5c35';
   const canvas = await renderShareCard(session);
   const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
   const d = new Date(session.startedAt);

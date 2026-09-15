@@ -32,6 +32,14 @@ export function render(root, { navigate }) {
   ]);
   root.append(form);
 
+  // Fortschrittsfotos: eigener Bereich (Bilder liegen in IndexedDB)
+  root.append(h('div.card.tappable.mt', { onclick: () => navigate('/photos') }, [
+    h('div.row.between', {}, [
+      h('div', {}, [h('div.title-ico', { html: svgIcon.camera + '<b>Fortschrittsfotos</b>' }), h('div.small.faint', { text: 'Monatlich ein Foto – Vorher/Nachher mit Schieberegler' })]),
+      h('div', { html: svgIcon.chevron }),
+    ]),
+  ]));
+
   const log = getBodyLog();
   if (!log.length) {
     root.append(h('p.small.faint.mt', { text: 'Tipp: Immer zur gleichen Tageszeit wiegen (z.B. morgens nach dem Aufstehen) – dann ist die Verlaufslinie aussagekräftig.' }));

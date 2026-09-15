@@ -2,6 +2,7 @@
 import { load, getActiveWorkout, subscribe, getSettings } from './store.js';
 import { toast, h, illustration, closeAllSheets } from './util.js';
 import { restTimer } from './timer.js';
+import { applyAccent } from './theme.js';
 
 import * as plans from './views/plans.js';
 import * as planDetail from './views/plan-detail.js';
@@ -12,6 +13,7 @@ import * as progress from './views/progress.js';
 import * as settings from './views/settings.js';
 import * as library from './views/library.js';
 import * as body from './views/body.js';
+import * as photos from './views/photos.js';
 import * as food from './views/food.js';
 import * as foodGenerate from './views/food-generate.js';
 import { seedTemplates } from './templates.js';
@@ -32,6 +34,7 @@ const routes = [
   { re: /^\/milestones$/, view: progress, sub: 'milestones', tab: 'progress' },
   { re: /^\/records$/, view: progress, sub: 'records', tab: 'progress' },
   { re: /^\/body$/, view: body, tab: 'progress' },
+  { re: /^\/photos$/, view: photos, tab: 'progress' },
   { re: /^\/food$/, view: food, tab: 'food' },
   { re: /^\/food\/recipes$/, view: food, sub: 'recipes', tab: 'food' },
   { re: /^\/food\/recipe\/([^/]+)$/, view: food, sub: 'recipe', tab: 'food' },
@@ -103,6 +106,7 @@ function applyTheme() {
   const pref = getSettings().theme || 'dark';
   const theme = pref === 'system' ? (mqDark.matches ? 'dark' : 'light') : pref;
   document.documentElement.dataset.theme = theme;
+  applyAccent(getSettings().accent || 'orange', theme);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#182030' : '#f4f5f8');
 }
 mqDark.addEventListener?.('change', applyTheme);
