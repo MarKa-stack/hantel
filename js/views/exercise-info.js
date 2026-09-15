@@ -1,8 +1,8 @@
 // Info-Sheet zu einer Übung: animierte Figur ↔ Gerätebild (Maschine/Kabelturm/Hanteln mit Aufsatz und Einstellung), Muskeln, Tipps
-import { h, openSheet } from '../util.js';
+import { h, openSheet, shrinkImage, toast } from '../util.js';
 import { findExercise, exerciseFigure } from '../exercise-db.js';
 import { findCustomExercise, MUSCLE_NAME } from '../muscles.js';
-import { EQUIPMENT, equipmentSvg } from '../equipment.js';
+import { EQUIPMENT, equipmentSvg, equipmentPhoto, setEquipmentPhoto } from '../equipment.js';
 
 /**
  * @param {string} name Übungsname (wie im Plan)
@@ -25,8 +25,28 @@ export function openExerciseInfo(name, opts = {}) {
       const hero = h('div.fig-hero', { html: exerciseFigure(e, { animate: true }) });
       const eq = e.equip && EQUIPMENT[e.equip.type];
       if (eq) {
+        // Eigenes Foto vom Gerät im eigenen Studio (pro Gerätetyp) – sonst die Zeichnung
+        const eqHero = h('div.equip-hero');
+        const file = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true });
+        const drawHero = () => {
+          eqHero.innerHTML = '';
+          const photo = equipmentPhoto(e.equip.type);
+          if (photo) eqHero.append(h('img.equip-photo', { src: photo, alt: eq.name }));
+          else eqHero.innerHTML = equipmentSvg(e.equip.type);
+          eqHero.append(h('div.equip-photo-btns', {}, [
+            h('button.btn.sm' + (photo ? '.ghost' : ''), { text: photo ? 'Foto ändern' : 'Foto aus deinem Studio', onclick: () => file.click() }),
+            photo ? h('button.btn.sm.ghost', { text: 'Entfernen', onclick: () => { setEquipmentPhoto(e.equip.type, null); drawHero(); } }) : null,
+          ]));
+        };
+        file.addEventListener('change', async () => {
+          const f = file.files?.[0]; if (!f) return;
+          try { setEquipmentPhoto(e.equip.type, await shrinkImage(f, { maxSide: 900, maxBytes: 140_000 })); toast('Gerätefoto gespeichert – gilt für alle Übungen an diesem Gerät'); drawHero(); }
+          catch (err) { toast('Fehler: ' + err.message); }
+          file.value = '';
+        });
+        drawHero();
         const eqBox = h('div.equip-box', { hidden: true }, [
-          h('div.equip-hero', { html: equipmentSvg(e.equip.type) }),
+          eqHero, file,
           h('div.equip-name', { text: eq.name }),
           h('div.small.muted', { text: eq.desc }),
           e.equip.attachment ? h('div.equip-line', {}, [h('span.lbl', { text: 'Aufsatz / Griff' }), h('span', { text: e.equip.attachment })]) : null,

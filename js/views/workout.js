@@ -4,7 +4,7 @@ import { getActiveWorkout, touchWorkout, finishWorkout, cancelWorkout, getSettin
 import { restTimer, unlockAudio, keepAlive, setWakeLockWanted } from '../timer.js';
 import { speak, sayWeightReps, primeSpeech } from '../speech.js';
 import { recommend, detectSetPRs, sessionPRs, fmtKg, PR_LABELS, warmupSets, platesFor, plateauFor, deloadFor } from '../progression.js';
-import { findExercise, EXERCISES } from '../exercise-db.js';
+import { findExercise, EXERCISES, exerciseFigure } from '../exercise-db.js';
 import { muscleSets, bodyMapSvg, MUSCLE_NAME, musclesFor, findCustomExercise } from '../muscles.js';
 import { openExerciseInfo, figureThumb } from './exercise-info.js';
 import { backupDue, exportBackup } from '../backup.js';
@@ -134,7 +134,9 @@ export function render(root, { navigate }) {
 
     // Kopfbereich der Übung – kompakt: Bild, Name, Muskeln, Ziel; alles Weitere hinter „⋯“
     body.append(h('div.wk-step', { text: `Übung ${i + 1} von ${w.entries.length}`, style: { margin: '4px 0 8px' } }));
-    const thumb = figureThumb(entry.name);
+    // Bühne: animierte Figur groß, tippen zeigt Ausführung + Gerät
+    const anim = exerciseFigure(entry.name, { animate: true });
+    const thumb = anim ? h('div.wk-stage', { onclick: showInfo }, [h('div.wk-stage-fig', { html: anim }), h('div.wk-stage-hint', { html: svgIcon.info + '<span>Ausführung & Gerät</span>' })]) : null;
     const setup = setupRow(entry);
     const more = () => actionSheet(entry.name, [
       { label: 'Ausführung & Tipps', fn: showInfo },
@@ -143,8 +145,8 @@ export function render(root, { navigate }) {
       { label: 'Maschineneinstellungen', fn: () => setup.edit() },
       { label: 'Übung tauschen (nur heute)', fn: () => swapExercise(entry) },
     ]);
+    if (thumb) body.append(thumb);
     body.append(h('div.wk-ex', {}, [
-      thumb ? h('div', { onclick: showInfo }, [thumb]) : null,
       h('div.grow', {}, [
         h('div.wk-name', { text: entry.name }),
         musclesTxt ? h('div.wk-muscles', { text: musclesTxt }) : null,
