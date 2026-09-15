@@ -216,17 +216,16 @@ const r1 = (v) => Math.round(v * 10) / 10;
 const str = (v, max) => String(v == null ? '' : v).trim().slice(0, max);
 
 /**
- * Sehr kleine Schema-Prüfung (type, required, enum, additionalProperties, min/max, maxItems/maxLength) –
- * genug für unsere flachen Schemas, ohne Abhängigkeit. Liefert Liste von Problemen (leer = ok).
+ * Sehr kleine Schema-Prüfung – nur Struktur (type, required, additionalProperties, maxItems), ohne Abhängigkeit.
+ * Längen, Zahlenbereiche und Enums werden bewusst NICHT abgelehnt: die Anbieter setzen sie im strikten Modus nicht durch,
+ * und clean() kürzt bzw. klemmt sie ohnehin. (Vorher scheiterte z.B. eine Subway-Bestellung an einer zu langen note.)
+ * Liefert Liste von Problemen (leer = ok).
  */
 function validateSchema(schema, value, path = '$', out = []) {
   const types = [].concat(schema.type || []);
   const t = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
   const typeOk = !types.length || types.includes(t) || (t === 'number' && types.includes('integer') && Number.isInteger(value));
   if (!typeOk) { out.push(`${path}: erwartet ${types.join('|')}, ist ${t}`); return out; }
-  if (schema.enum && !schema.enum.includes(value)) out.push(`${path}: ungültiger Wert`);
-  if (t === 'number') { if (schema.minimum != null && value < schema.minimum) out.push(`${path}: < ${schema.minimum}`); if (schema.maximum != null && value > schema.maximum) out.push(`${path}: > ${schema.maximum}`); }
-  if (t === 'string' && schema.maxLength != null && value.length > schema.maxLength) out.push(`${path}: zu lang`);
   if (t === 'array') { if (schema.maxItems != null && value.length > schema.maxItems) out.push(`${path}: zu viele Einträge`); if (schema.items) value.forEach((v, i) => validateSchema(schema.items, v, `${path}[${i}]`, out)); }
   if (t === 'object') {
     for (const k of schema.required || []) if (!(k in value)) out.push(`${path}.${k}: fehlt`);
