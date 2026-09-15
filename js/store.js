@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS = {
   photoConsent: false,  // Datenschutzhinweis zur Fotoanalyse bestätigt
   theme: 'dark',        // 'dark' | 'light' | 'system'
   accent: 'orange',     // Akzentfarbe, siehe js/theme.js
+  coach: null,          // letzter KI-Wochenbericht (js/coach.js)
   weeklyGoal: 4,        // Trainings pro Woche (Wochenring auf dem Startbildschirm)
   barWeight: 20,        // Standard-Stangengewicht für den Scheibenrechner
   bgTimerAudio: false, // Pausentimer bei gesperrtem Bildschirm per lautlosem Audio – pausiert die Musik-App, deshalb aus

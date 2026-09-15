@@ -94,7 +94,7 @@ async function safeFetch(url, init, provider) {
 
 /**
  * Führt eine KI-Aufgabe aus ai-tasks.js aus – über den Hantel-Server oder direkt mit eigenem Key.
- * @param {'food-text'|'food-image'|'recipe'|'web-recipes'|'pdf-plans'} name
+ * @param {'food-text'|'food-image'|'recipe'|'web-recipes'|'pdf-plans'|'coach'} name
  * @param {object} payload Rohdaten (werden von task.input geprüft)
  * @returns {Promise<{ data:object, usage?:object }>}
  */

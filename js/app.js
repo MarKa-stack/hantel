@@ -14,6 +14,7 @@ import * as settings from './views/settings.js';
 import * as library from './views/library.js';
 import * as body from './views/body.js';
 import * as photos from './views/photos.js';
+import * as coach from './views/coach.js';
 import * as food from './views/food.js';
 import * as foodGenerate from './views/food-generate.js';
 import { seedTemplates } from './templates.js';
@@ -33,6 +34,7 @@ const routes = [
   { re: /^\/week\/(\d+)$/, view: progress, sub: 'week', tab: 'progress' },
   { re: /^\/milestones$/, view: progress, sub: 'milestones', tab: 'progress' },
   { re: /^\/records$/, view: progress, sub: 'records', tab: 'progress' },
+  { re: /^\/coach$/, view: coach, tab: 'progress' },
   { re: /^\/body$/, view: body, tab: 'progress' },
   { re: /^\/photos$/, view: photos, tab: 'progress' },
   { re: /^\/food$/, view: food, tab: 'food' },

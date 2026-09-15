@@ -9,6 +9,8 @@ import { milestonesReachedAt, allMilestones } from '../milestones.js';
 import { strengthStandard, LEVELS } from '../standards.js';
 import { openCustomExerciseEditor } from './custom-exercise.js';
 import { listPhotos } from '../photos.js';
+import { getCoachReport, coachDue } from '../coach.js';
+import { aiReady } from '../llm.js';
 
 const LEVELS_LABEL = (i) => LEVELS[i];
 
@@ -126,6 +128,24 @@ function renderOverview(root, { navigate }) {
 
   // Kennzahlen als Fenster zum Blättern: Diese Woche · Workouts gesamt · Serie
   root.append(statsCarousel(sessions, weekSessions, settings));
+
+  // Dein Coach: KI-Wochenbericht (Karte nur, wenn KI eingerichtet ist oder schon ein Bericht existiert)
+  {
+    const rep = getCoachReport();
+    if (rep || aiReady()) {
+      const due = coachDue();
+      root.append(h('div.card.tappable.row-card.coach-card', { onclick: () => navigate('/coach') }, [
+        h('div.row', {}, [
+          iconBox('sparkle', rep ? (rep.grade === 'top' || rep.grade === 'gut' ? 'good' : 'neutral') : ''),
+          h('div.grow', {}, [
+            h('div.row', { style: { gap: '8px' } }, [h('b', { text: 'Dein Coach' }), rep ? h('span.small.faint', { text: `KW ${rep.kw}` }) : null, due ? h('span.pill.accent.sm', { text: rep ? 'Neu' : 'Bereit' }) : null]),
+            h('div.small.faint.clamp2.coach-teaser', { text: rep ? rep.headline : 'KI-Wochenbericht: was lief gut, worauf achten, was nächste Woche ansteht' }),
+          ]),
+          h('div', { html: svgIcon.chevron }),
+        ]),
+      ]));
+    }
+  }
 
   // Erholungsstatus der Muskeln (von der Startseite hierher gezogen)
   {
