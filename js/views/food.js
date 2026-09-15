@@ -170,6 +170,7 @@ export function openAddSheet(meal, dayKey, onDone, opts = {}) {
     let onlineState = ''; // '', 'loading', 'done', 'error'
     let onlineError = '';
     let timer = null, onlineTimer = null;
+    let openTab = null; // Zuletzt / Favoriten / Rezepte eingeklappt
 
     const pickFood = (food, presetGrams) => {
       if (opts.saveOnly) {
@@ -214,14 +215,30 @@ export function openAddSheet(meal, dayKey, onDone, opts = {}) {
             h('button.btn.ai-btn', { html: svgIcon.camera + '<span>Essen fotografieren</span>', onclick: () => { close(); openPhotoSheet({ meal, dayKey, onDone }); } }),
             h('button.btn.ai-btn', { html: svgIcon.sparkle + '<span>Rezept aus Zutaten</span>', onclick: () => { close(); location.hash = '#/food/generate'; } }),
           ]));
+          // Fast Food: Kette + Bestellung → KI schätzt die Nährwerte (offizielle Werte der Kette)
+          results.append(h('div.ai-center', {}, [
+            h('button.btn.ai-btn.fastfood', { html: svgIcon.food + '<span>Fast Food</span>', onclick: () => { close(); openAiSheet({ meal: meal || 'lunch', dayKey, onDone, fastFood: true }); } }),
+          ]));
         }
         if (opts.saveOnly) { results.append(h('p.small.muted', { style: { padding: '8px 0' }, text: 'Name oder EAN eintippen bzw. Barcode scannen – der Treffer landet in deinen Lebensmitteln.' })); return; }
-        const rec = recentItems(10);
-        if (rec.length) { results.append(h('div.subhead', {}, [h('h2', { text: 'Zuletzt' })])); results.append(h('div.card', {}, rec.map(r => r.kind === 'recipe' ? row('recipe', r.item) : row('food', r.item, r.lastGrams ? ` · zuletzt ${r.lastGrams} g` : '')))); }
+        // Zuletzt / Favoriten / Rezepte: eingeklappt als Reiter, damit die Seite ruhig bleibt
+        const rec = recentItems(20);
         const fav = favoriteItems();
-        if (fav.length) { results.append(h('div.subhead', {}, [h('h2', { text: 'Favoriten' })])); results.append(h('div.card', {}, fav.map(r => row('food', r.item)))); }
-        if (!pickerOnly && getRecipes().length) { results.append(h('div.subhead', {}, [h('h2', { text: 'Rezepte' })])); results.append(h('div.card', {}, getRecipes().slice(0, 6).map(r => row('recipe', r)))); }
-        if (!rec.length && !fav.length) results.append(h('p.small.muted', { style: { padding: '8px 0' }, text: 'Tipp etwas ein – Grundnahrungsmittel sind sofort da, Markenprodukte kommen von Open Food Facts.' }));
+        const recs = pickerOnly ? [] : getRecipes();
+        const tabs = [
+          rec.length ? { key: 'recent', label: `Zuletzt (${rec.length})`, draw: () => h('div.card', {}, rec.map(r => r.kind === 'recipe' ? row('recipe', r.item) : row('food', r.item, r.lastGrams ? ` · zuletzt ${r.lastGrams} g` : ''))) } : null,
+          fav.length ? { key: 'fav', label: `Favoriten (${fav.length})`, draw: () => h('div.card', {}, fav.map(r => row('food', r.item))) } : null,
+          recs.length ? { key: 'recipes', label: `Rezepte (${recs.length})`, draw: () => h('div.card', {}, recs.map(r => row('recipe', r))) } : null,
+        ].filter(Boolean);
+        if (!tabs.length) { results.append(h('p.small.muted', { style: { padding: '8px 0' }, text: 'Tipp etwas ein – Grundnahrungsmittel sind sofort da, Markenprodukte kommen von Open Food Facts.' })); return; }
+        const panel = h('div.mt');
+        const seg = h('div.seg.mt.tabs', {}, tabs.map(t => h('button', { text: t.label, class: openTab === t.key ? 'active' : '', onclick: () => {
+          openTab = openTab === t.key ? null : t.key; // nochmal tippen klappt zu
+          for (const b of seg.children) b.classList.toggle('active', b.textContent === t.label && openTab === t.key);
+          panel.innerHTML = ''; if (openTab) panel.append(tabs.find(x => x.key === openTab).draw());
+        } })));
+        results.append(seg, panel);
+        if (openTab && tabs.some(t => t.key === openTab)) panel.append(tabs.find(t => t.key === openTab).draw());
         return;
       }
       if (looksLikeBarcode(q)) {
@@ -436,16 +453,22 @@ export function openFoodEditor(existing, onDone = () => {}) {
 // ==================================================================
 
 /** Freitext → Zutatenliste zum Prüfen → ins Tagebuch oder als Rezept */
-export function openAiSheet({ meal = 'lunch', dayKey = dateKey(), onDone = () => {}, recipeMode = false, onRecipe = null }) {
+const FAST_FOOD_CHAINS = ["McDonald's", 'Burger King', 'KFC', 'Subway', 'Döner', 'Pizza', 'Asia-Imbiss', 'Bäckerei', 'Five Guys', 'Restaurant'];
+
+export function openAiSheet({ meal = 'lunch', dayKey = dateKey(), onDone = () => {}, recipeMode = false, onRecipe = null, fastFood = false }) {
   const settings = getSettings();
   if (!aiReady()) { toast('Erst API-Key unter „Mehr → KI“ eintragen', { duration: 4000 }); return; }
   openSheet((sheet, close) => {
-    const ta = h('textarea.input', { placeholder: recipeMode ? 'z.B. 500 g Hähnchenbrust, 200 g Philadelphia, 100 ml Sahne, 300 g Reis roh, 2 Paprika, 1 EL Öl – 4 Portionen' : 'z.B. 3 Eier, 2 Scheiben Vollkornbrot mit Butter, 1 Banane', style: { minHeight: '96px' } });
+    const ta = h('textarea.input', { placeholder: fastFood ? 'z.B. Big Mac Menü groß mit Cola Zero und McFlurry' : recipeMode ? 'z.B. 500 g Hähnchenbrust, 200 g Philadelphia, 100 ml Sahne, 300 g Reis roh, 2 Paprika, 1 EL Öl – 4 Portionen' : 'z.B. 3 Eier, 2 Scheiben Vollkornbrot mit Butter, 1 Banane', style: { minHeight: '96px' } });
+    // Fast Food: Kette antippen, Bestellung tippen – die KI nutzt die offiziellen Nährwerte der Kette (Menü in Einzelteile)
+    let chain = '';
+    const chips = fastFood ? h('div.chips.mb', {}, FAST_FOOD_CHAINS.map(c => h('button.chip', { text: c, onclick: () => { chain = chain === c ? '' : c; for (const b of chips.children) b.classList.toggle('on', b.textContent === chain); if (chain) ta.focus(); } }))) : null;
     const out = h('div');
     let parsed = null;
     let mealSel = meal;
     const analyzeBtn = h('button.btn.primary.block', { text: 'Analysieren', onclick: async () => {
-      const text = ta.value.trim(); if (!text) { ta.focus(); return; }
+      let text = ta.value.trim(); if (!text) { ta.focus(); return; }
+      if (fastFood) text = `Fast Food${chain ? ` bei ${chain}` : ''} (offizielle Nährwertangaben der Kette in Deutschland, Menü in Einzelteile zerlegen, Standardgrößen): ${text}`;
       analyzeBtn.disabled = true; analyzeBtn.textContent = 'KI rechnet …';
       try { parsed = await aiParseFood(text); drawParsed(); }
       catch (e) { toast('Fehler: ' + e.message, { duration: 5000 }); }
@@ -494,9 +517,9 @@ export function openAiSheet({ meal = 'lunch', dayKey = dateKey(), onDone = () =>
       ]));
     };
     sheet.append(
-      h('h2', { text: recipeMode ? 'Rezept per Freitext' : 'Was hast du gegessen?' }),
-      h('p.small.muted.mb', { text: 'Die KI schätzt Mengen und Nährwerte – prüfen, anpassen, eintragen. Alles Erkannte landet in „Meine Lebensmittel“.' }),
-      ta, h('div.mt', {}, [analyzeBtn]), out,
+      h('h2', { text: fastFood ? 'Fast Food' : recipeMode ? 'Rezept per Freitext' : 'Was hast du gegessen?' }),
+      h('p.small.muted.mb', { text: fastFood ? 'Kette antippen (optional) und Bestellung eingeben – die KI schätzt Kalorien und Makros nach den offiziellen Werten der Kette. Schätzwerte, bitte prüfen.' : 'Die KI schätzt Mengen und Nährwerte – prüfen, anpassen, eintragen. Alles Erkannte landet in „Meine Lebensmittel“.' }),
+      chips, ta, h('div.mt', {}, [analyzeBtn]), out,
       h('div.actions', {}, [h('button.btn.block', { text: 'Schließen', onclick: close })]),
     );
     setTimeout(() => ta.focus(), 80);
@@ -528,7 +551,8 @@ function renderRecipes(root, { navigate }) {
   ]));
   const list = getRecipes();
   if (!list.length) { root.append(h('div.card', {}, [h('p.small.muted', { text: 'Noch keine Rezepte. Oben per KI aus deinen Zutaten erstellen lassen, in einem Satz beschreiben oder mit „+“ Zutat für Zutat anlegen. Ein Rezept trägst du danach mit zwei Tipps als Portion ein.' })])); return; }
-  const card = h('div.card');
+  // Liste eingeklappt hinter einem Reiter – die Seite bleibt ruhig, bis man sie braucht
+  const card = h('div.card', { hidden: true });
   for (const r of list) {
     const t = recipeTotals(r);
     card.append(h('div.food-row', { onclick: () => navigate('/food/recipe/' + r.id) }, [
@@ -536,7 +560,8 @@ function renderRecipes(root, { navigate }) {
       h('div', { html: svgIcon.chevron }),
     ]));
   }
-  root.append(card);
+  const tab = h('button.btn.ghost.block.tab-toggle', { html: `<span>Meine Rezepte (${list.length})</span>` + svgIcon.chevron, onclick: () => { card.hidden = !card.hidden; tab.classList.toggle('open', !card.hidden); } });
+  root.append(tab, card);
 }
 
 function renderRecipeEditor(root, { params, navigate }) {

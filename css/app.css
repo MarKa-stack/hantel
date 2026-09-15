@@ -1433,3 +1433,13 @@ details.credits summary { font-size: 13px; color: var(--text-3); cursor: pointer
 details.credits ul { padding-left: 16px; margin: 6px 0 0; }
 details.credits li { margin-bottom: 4px; line-height: 1.35; }
 details.credits a { color: var(--text-2); }
+
+/* ---------- Essen (1.19): Fast Food, eingeklappte Listen ---------- */
+.ai-center { display: flex; justify-content: center; margin-top: 8px; }
+.ai-center .btn.ai-btn { min-width: 56%; }
+.btn.ai-btn.fastfood svg { fill: var(--accent); }
+.seg.tabs button { font-size: 13px; }
+.tab-toggle { justify-content: space-between; padding: 0 14px 0 16px; margin-top: 4px; }
+.tab-toggle svg.chev { transition: transform 0.2s ease; }
+.tab-toggle.open svg.chev { transform: rotate(90deg); }
+.tab-toggle + .card { margin-top: 8px; }
