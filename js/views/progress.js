@@ -16,33 +16,9 @@ export function render(root, ctx) {
   if (ctx.sub === 'session') return renderSession(root, ctx);
   if (ctx.sub === 'muscles') return renderMuscles(root, ctx);
   if (ctx.sub === 'week') return renderWeek(root, ctx);
-  if (ctx.sub === 'milestones') return renderMilestones(root, ctx);
+  if (ctx.sub === 'milestones') return renderRecords(root, ctx); // alte Route → Reiter Meilensteine
   if (ctx.sub === 'records') return renderRecords(root, ctx);
   return renderOverview(root, ctx);
-}
-
-// ---------- Meilensteine ----------
-
-function renderMilestones(root, { navigate }) {
-  root.append(h('button.back', { html: svgIcon.back + '<span>Fortschritt</span>', onclick: () => navigate('/progress') }));
-  const all = allMilestones();
-  const done = all.filter(m => m.at).sort((a, b) => b.at - a.at);
-  const open = all.filter(m => !m.at);
-  root.append(h('div.page-head', {}, [h('div', {}, [h('div.eyebrow', { text: `${done.length} von ${all.length}` }), h('h1', { text: 'Meilensteine' })])]));
-  if (done.length) {
-    root.append(h('div.subhead', {}, [h('h2', { text: 'Erreicht' })]));
-    root.append(h('div.card', {}, done.map(m => h('div.pr-row', {}, [
-      iconBox('trophy', 'good'),
-      h('div.grow', { style: { marginLeft: '10px' } }, [h('div', { text: m.title, style: { fontWeight: 700 } }), h('div.sub', { text: `${m.desc} · ${fmtDate(m.at)}` })]),
-    ]))));
-  }
-  if (open.length) {
-    root.append(h('div.subhead', {}, [h('h2', { text: 'Noch offen' })]));
-    root.append(h('div.card', {}, open.map(m => h('div.pr-row', { style: { opacity: 0.6 } }, [
-      iconBox('trophy', 'neutral'),
-      h('div.grow', { style: { marginLeft: '10px' } }, [h('div', { text: m.title, style: { fontWeight: 600 } }), h('div.sub', { text: m.desc })]),
-    ]))));
-  }
 }
 
 // ---------- Wochenrückblick ----------
@@ -125,6 +101,10 @@ function renderWeek(root, { params, navigate }) {
 
 // ---------- Übersicht ----------
 
+// Verlauf auf der Übersicht ein-/ausgeklappt (Standard: zu)
+const HIST_KEY = 'hantel.progressHistoryOpen';
+let histOpen = (() => { try { return localStorage.getItem(HIST_KEY) === '1'; } catch { return false; } })();
+
 function renderOverview(root, { navigate }) {
   const settings = getSettings();
   const sessions = getSessions();
@@ -142,15 +122,9 @@ function renderOverview(root, { navigate }) {
 
   const thisWeek = weekKey(Date.now());
   const weekSessions = sessions.filter(s => weekKey(s.startedAt) === thisWeek);
-  const weekVol = weekSessions.reduce((a, s) => a + sessionVolume(s), 0);
-  const streak = weekStreak(sessions);
 
-  root.append(h('div.stats', {}, [
-    stat(String(weekSessions.length), 'Diese Woche'),
-    stat(String(sessions.length), 'Workouts gesamt'),
-    stat(`${fmtNum(weekVol)}<small>${settings.unit}</small>`, 'Volumen · Woche'),
-    stat(`${streak}<small>Wo.</small>`, 'Serie'),
-  ]));
+  // Kennzahlen als Fenster zum Blättern: Diese Woche · Workouts gesamt · Serie
+  root.append(statsCarousel(sessions, weekSessions, settings));
 
   // Erholungsstatus der Muskeln (von der Startseite hierher gezogen)
   {
@@ -211,20 +185,6 @@ function renderOverview(root, { navigate }) {
   }
 
 
-  // Muskelgruppen-Karte
-  const ms = muscleSets(weekSessions);
-  const top = Object.entries(ms.totals).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  root.append(h('div.card.tappable.row-card', { onclick: () => navigate('/muscles') }, [
-    h('div.row', {}, [
-      iconBox('body'),
-      h('div.grow', {}, [
-        h('b', { text: 'Muskelgruppen' }),
-        h('div.small.faint', { text: top.length ? 'Diese Woche: ' + top.map(([k, n]) => `${MUSCLE_NAME[k]} ${fmtSetsShort(n)}/${volumeTarget().max}`).join(' · ') : 'Wochenbilanz und Körperkarte' }),
-      ]),
-      h('div', { html: svgIcon.chevron }),
-    ]),
-  ]));
-
   // Körpergewicht
   const body = getBodyLog();
   const lastBody = [...body].reverse().find(e => e.weight != null);
@@ -239,45 +199,29 @@ function renderOverview(root, { navigate }) {
     ]),
   ]));
 
-  // Meilensteine
+  // Rekorde & Meilensteine: eine Seite mit zwei Reitern
   const mstones = allMilestones();
   const reached = mstones.filter(m => m.at);
-  const latest = reached.sort((a, b) => b.at - a.at)[0];
-  root.append(h('div.card.tappable.row-card', { onclick: () => navigate('/milestones') }, [
-    h('div.row', {}, [
-      iconBox('trophy', 'good'),
-      h('div.grow', {}, [
-        h('b', { text: 'Meilensteine' }),
-        h('div.small.faint', { text: `${reached.length} von ${mstones.length}` + (latest ? ` · zuletzt „${latest.title}“` : '') }),
-      ]),
-      h('div', { html: svgIcon.chevron }),
-    ]),
-  ]));
-
-  // Rekorde: eigene Seite, hier nur der Einstieg
-  const idx = exerciseIndex();
   const lastPR = latestPR(sessions);
   root.append(h('div.card.tappable.row-card', { onclick: () => navigate('/records') }, [
     h('div.row', {}, [
-      iconBox('medal', 'good'),
+      iconBox('trophy', 'good'),
       h('div.grow', {}, [
-        h('b', { text: 'Rekorde' }),
-        h('div.small.faint', { text: lastPR ? `Zuletzt: ${lastPR.name} · ${fmtPR(lastPR, settings)} · ${fmtShortDate(lastPR.date)}` : `${idx.length} Übungen mit Bestwerten` }),
+        h('b', { text: 'Rekorde & Meilensteine' }),
+        h('div.small.faint', { text: (lastPR ? `Rekord: ${lastPR.name} ${fmtPR(lastPR, settings)} · ` : '') + `${reached.length} von ${mstones.length} Meilensteinen` }),
       ]),
       h('div', { html: svgIcon.chevron }),
     ]),
   ]));
 
-  // Kalender und Wochen-Chart teilen sich eine Karte – Pfeile blättern
-  root.append(h('div.subhead', {}, [h('h2', { text: 'Verlauf' })]));
+  // Verlauf (Kalender/Wochen-Chart + letzte Workouts) einklappbar, Zustand wird gemerkt
   const firstWeek = weekKey(sessions.reduce((a, s) => Math.min(a, s.startedAt), Infinity));
   const spanWeeks = Math.round((weekKey(Date.now()) - firstWeek) / (7 * 86400000)) + 1;
-  root.append(carousel([
+  const hist = h('div.history');
+  hist.append(carousel([
     { title: 'Trainingskalender', make: () => heatmap(sessions, Math.min(20, Math.max(8, spanWeeks)), navigate) },
     { title: 'Workouts pro Woche', make: () => weeklyBarChart(sessions, 12, chartWidth(root)) },
   ]));
-
-  // Letzte Workouts, auf Wunsch alle
   const all = [...sessions].reverse();
   const list = h('div.list.mt');
   const drawList = (n) => {
@@ -286,7 +230,45 @@ function renderOverview(root, { navigate }) {
     if (all.length > n) list.append(h('button.btn.ghost.block', { text: `Alle ${all.length} Workouts anzeigen`, onclick: () => drawList(all.length) }));
   };
   drawList(6);
-  root.append(list);
+  hist.append(list);
+  hist.hidden = !histOpen;
+  const histTab = h('button.btn.ghost.block.tab-toggle.mt', { class: histOpen ? 'open' : '', html: `<span>Verlauf · ${all.length} Workout${all.length === 1 ? '' : 's'}</span>` + svgIcon.chevron, onclick: () => {
+    histOpen = !histOpen; hist.hidden = !histOpen; histTab.classList.toggle('open', histOpen);
+    try { localStorage.setItem(HIST_KEY, histOpen ? '1' : '0'); } catch { /* egal */ }
+  } });
+  root.append(histTab, hist);
+}
+
+/** Eine Kennzahl pro Seite: große Zahl, Einheit, eine Zeile Kontext und eine kleine Grafik */
+function statsCarousel(sessions, weekSessions, settings) {
+  const big = (val, unit, sub, extra) => h('div.stat-page', {}, [
+    h('div.stat-val', { html: `${val}${unit ? `<small>${unit}</small>` : ''}` }),
+    h('div.small.muted', { text: sub }),
+    extra || null,
+  ]);
+  const week0 = weekKey(Date.now());
+  const weeks = new Set(sessions.map(s => weekKey(s.startedAt)));
+  const first = sessions.reduce((a, s) => Math.min(a, s.startedAt), Infinity);
+  const spanWeeks = Math.max(1, Math.round((week0 - weekKey(first)) / (7 * 86400000)) + 1);
+  const streak = weekStreak(sessions);
+  // Beste Serie: längste Folge aufeinanderfolgender Trainingswochen
+  let best = 0, run = 0, prev = null;
+  for (const w of [...weeks].sort((a, b) => a - b)) { run = prev != null && w - prev === 7 * 86400000 ? run + 1 : 1; best = Math.max(best, run); prev = w; }
+  const sets = weekSessions.reduce((a, s) => a + s.entries.reduce((b, e) => b + e.sets.length, 0), 0);
+  const mins = Math.round(weekSessions.reduce((a, s) => a + (s.durationSec || 0), 0) / 60);
+  const trained = new Set(weekSessions.map(s => (new Date(s.startedAt).getDay() + 6) % 7));
+  const today = (new Date().getDay() + 6) % 7;
+  const days = h('div.stat-days', {}, ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d, i) => h('span', { text: d, class: (trained.has(i) ? 'on' : '') + (i === today ? ' today' : '') })));
+  const totalSets = sessions.reduce((a, s) => a + s.entries.reduce((b, e) => b + e.sets.length, 0), 0);
+  const totalSec = sessions.reduce((a, s) => a + (s.durationSec || 0), 0);
+  const totals = h('div.small.faint', { style: { marginTop: '4px' }, text: `${fmtDurationLong(totalSec)} im Training · ${totalSets} Sätze` });
+  // Letzte 8 Wochen: welche hatten Training
+  const wkRow = h('div.stat-days.weeks', {}, Array.from({ length: 8 }, (_, k) => { const w = week0 - (7 - k) * 7 * 86400000; return h('span', { text: String(isoWeek(w)), class: (weeks.has(w) ? 'on' : '') + (w === week0 ? ' today' : '') }); }));
+  return carousel([
+    { title: 'Diese Woche', make: () => big(weekSessions.length, weekSessions.length === 1 ? 'Workout' : 'Workouts', weekSessions.length ? `${sets} Sätze · ${mins} min` : 'Noch kein Training diese Woche', days) },
+    { title: 'Workouts gesamt', make: () => big(sessions.length, '', `seit ${fmtShortDate(first)} · Ø ${(sessions.length / spanWeeks).toFixed(1).replace('.', ',')} pro Woche`, totals) },
+    { title: 'Serie', make: () => big(streak, streak === 1 ? 'Woche' : 'Wochen', `in Folge mit Training · beste Serie ${best} Woche${best === 1 ? '' : 'n'}`, wkRow) },
+  ]);
 }
 
 /** Karte mit mehreren Ansichten: Titel + ‹ › blättern, Punkte zeigen die Position */
@@ -326,43 +308,75 @@ function fmtPR(p, settings) {
   return p.type === 'volume' ? `${fmtNum(p.value)} ${settings.unit}` : p.type === 'e1rm' ? `${fmtKg(Math.round(p.value))} 1RM` : `${fmtKg(p.weight)} × ${p.reps}`;
 }
 
-// ---------- Rekorde ----------
+// ---------- Rekorde & Meilensteine ----------
 
-function renderRecords(root, { navigate }) {
+let recTab = 'records';
+
+function renderRecords(root, { navigate, sub }) {
+  if (sub === 'milestones') recTab = 'milestones';
   const settings = getSettings();
   const sessions = getSessions();
-  root.append(h('button.back', { html: svgIcon.back + '<span>Fortschritt</span>', onclick: () => navigate('/progress') }));
   const idx = exerciseIndex();
-  root.append(h('div.page-head', {}, [h('div', {}, [h('div.eyebrow', { text: `${idx.length} Übungen` }), h('h1', { text: 'Rekorde' })])]));
-  if (!idx.length) { root.append(h('div.card', {}, [h('p.small.muted', { text: 'Sobald du trainierst, stehen hier deine Bestwerte je Übung.' })])); return; }
+  const all = allMilestones();
+  const done = all.filter(m => m.at).sort((a, b) => b.at - a.at);
+  const open = all.filter(m => !m.at);
+  root.append(h('button.back', { html: svgIcon.back + '<span>Fortschritt</span>', onclick: () => navigate('/progress') }));
+  root.append(h('div.page-head', {}, [h('div', {}, [h('div.eyebrow', { text: `${idx.length} Übungen · ${done.length} von ${all.length} Meilensteinen` }), h('h1', { text: 'Rekorde & Meilensteine' })])]));
 
-  // Jüngste Rekorde (letzte 8 Sessions)
-  const recent = [];
-  for (let k = sessions.length - 1; k >= Math.max(0, sessions.length - 8); k--) for (const p of sessionPRs(sessions[k])) recent.push({ ...p, date: sessions[k].startedAt });
-  if (recent.length) {
-    root.append(h('div.subhead', {}, [h('h2', { text: 'Zuletzt aufgestellt' })]));
-    const rc = h('div.card');
-    for (const p of recent.slice(0, 8)) rc.append(h('div.pr-row', { onclick: () => navigate('/exercise/' + encodeURIComponent(p.name)), style: { cursor: 'pointer' } }, [
-      iconBox('trophy', 'good'),
-      h('div.grow', {}, [h('div', { text: p.name, style: { fontWeight: 600 } }), h('div.sub', { text: `${PR_LABELS[p.type]} · ${fmtShortDate(p.date)}` })]),
-      h('div.val', { text: fmtPR(p, settings) }),
-    ]));
-    root.append(rc);
-  }
+  const panel = h('div');
+  const tabs = [['records', 'Rekorde'], ['milestones', 'Meilensteine']];
+  const seg = h('div.seg.mt', {}, tabs.map(([k, l]) => h('button', { text: l, class: recTab === k ? 'active' : '', onclick: () => {
+    recTab = k; for (const b of seg.children) b.classList.toggle('active', b.textContent === l); draw();
+  } })));
+  root.append(seg, panel);
 
-  root.append(h('div.subhead', {}, [h('h2', { text: 'Bestwerte je Übung' })]));
-  const exCard = h('div.card');
-  for (const e of idx) {
-    exCard.append(h('div.pr-row', { onclick: () => navigate('/exercise/' + encodeURIComponent(e.name)), style: { cursor: 'pointer' } }, [
-      h('div.grow', {}, [
-        h('div', { text: e.name, style: { fontWeight: 600 } }),
-        h('div.sub', { text: `${e.count}× trainiert · 1RM ≈ ${fmtWeight(Math.round(e.e1rm), settings.unit)}` }),
-      ]),
-      h('div.val', { text: fmtWeight(e.maxWeight, settings.unit) }),
-      h('div', { html: svgIcon.chevron }),
-    ]));
-  }
-  root.append(exCard);
+  const drawRecords = () => {
+    if (!idx.length) { panel.append(h('div.card.mt', {}, [h('p.small.muted', { text: 'Sobald du trainierst, stehen hier deine Bestwerte je Übung.' })])); return; }
+    // Jüngste Rekorde (letzte 8 Sessions)
+    const recent = [];
+    for (let k = sessions.length - 1; k >= Math.max(0, sessions.length - 8); k--) for (const p of sessionPRs(sessions[k])) recent.push({ ...p, date: sessions[k].startedAt });
+    if (recent.length) {
+      panel.append(h('div.subhead', {}, [h('h2', { text: 'Zuletzt aufgestellt' })]));
+      const rc = h('div.card');
+      for (const p of recent.slice(0, 8)) rc.append(h('div.pr-row', { onclick: () => navigate('/exercise/' + encodeURIComponent(p.name)), style: { cursor: 'pointer' } }, [
+        iconBox('trophy', 'good'),
+        h('div.grow', {}, [h('div', { text: p.name, style: { fontWeight: 600 } }), h('div.sub', { text: `${PR_LABELS[p.type]} · ${fmtShortDate(p.date)}` })]),
+        h('div.val', { text: fmtPR(p, settings) }),
+      ]));
+      panel.append(rc);
+    }
+    panel.append(h('div.subhead', {}, [h('h2', { text: 'Bestwerte je Übung' })]));
+    const exCard = h('div.card');
+    for (const e of idx) {
+      exCard.append(h('div.pr-row', { onclick: () => navigate('/exercise/' + encodeURIComponent(e.name)), style: { cursor: 'pointer' } }, [
+        h('div.grow', {}, [
+          h('div', { text: e.name, style: { fontWeight: 600 } }),
+          h('div.sub', { text: `${e.count}× trainiert · 1RM ≈ ${fmtWeight(Math.round(e.e1rm), settings.unit)}` }),
+        ]),
+        h('div.val', { text: fmtWeight(e.maxWeight, settings.unit) }),
+        h('div', { html: svgIcon.chevron }),
+      ]));
+    }
+    panel.append(exCard);
+  };
+  const drawMilestones = () => {
+    if (done.length) {
+      panel.append(h('div.subhead', {}, [h('h2', { text: 'Erreicht' })]));
+      panel.append(h('div.card', {}, done.map(m => h('div.pr-row', {}, [
+        iconBox('trophy', 'good'),
+        h('div.grow', { style: { marginLeft: '10px' } }, [h('div', { text: m.title, style: { fontWeight: 700 } }), h('div.sub', { text: `${m.desc} · ${fmtDate(m.at)}` })]),
+      ]))));
+    }
+    if (open.length) {
+      panel.append(h('div.subhead', {}, [h('h2', { text: 'Noch offen' })]));
+      panel.append(h('div.card', {}, open.map(m => h('div.pr-row', { style: { opacity: 0.6 } }, [
+        iconBox('trophy', 'neutral'),
+        h('div.grow', { style: { marginLeft: '10px' } }, [h('div', { text: m.title, style: { fontWeight: 600 } }), h('div.sub', { text: m.desc })]),
+      ]))));
+    }
+  };
+  const draw = () => { panel.innerHTML = ''; (recTab === 'milestones' ? drawMilestones : drawRecords)(); };
+  draw();
 }
 
 /** Chart-Breite in CSS-Pixeln (Container minus Card-/View-Padding), damit Text nicht skaliert */

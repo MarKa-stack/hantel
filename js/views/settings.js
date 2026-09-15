@@ -7,7 +7,7 @@ import { exportBackup } from '../backup.js';
 import { cloudPush, cloudPull } from '../cloud.js';
 import { exportCSV, exportICS, WEEKDAYS_DE } from '../exporters.js';
 
-export const APP_VERSION = '1.21.0';
+export const APP_VERSION = '1.22.0';
 
 export function render(root, { navigate }) {
   const s = getSettings();
