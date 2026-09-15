@@ -7,7 +7,7 @@ import { exportBackup } from '../backup.js';
 import { cloudPush, cloudPull } from '../cloud.js';
 import { exportCSV, exportICS, WEEKDAYS_DE } from '../exporters.js';
 
-export const APP_VERSION = '1.17.0';
+export const APP_VERSION = '1.18.0';
 
 export function render(root, { navigate }) {
   const s = getSettings();
@@ -302,7 +302,7 @@ export function render(root, { navigate }) {
       h('summary', { text: 'Bildnachweise (Gerätefotos)' }),
       h('ul.small.faint', {}, Object.entries(PHOTOS).map(([k, p]) => h('li', {}, [
         h('b', { text: EQUIPMENT[k]?.name || k }), h('span', { text: ': ' }),
-        h('a', { href: p.url, target: '_blank', rel: 'noopener', text: `„${p.title}“` }), h('span', { text: ` – ${p.author}, ${p.license}, via Wikimedia Commons (verkleinert)` }),
+        h('a', { href: p.url, target: '_blank', rel: 'noopener', text: `„${p.title}“` }), h('span', { text: ` – ${p.author}, ${p.license}${p.url.includes('flickr') ? ', via Flickr' : ', via Wikimedia Commons'} (verkleinert)` }),
       ]))),
     ]),
     h('p.small.faint.mt', { text: `Hantel ${APP_VERSION}` }),

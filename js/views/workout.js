@@ -38,10 +38,14 @@ export function render(root, { navigate }) {
   const progressEl = h('div.wk-progress');
   const restMini = h('span.rest-mini');
   root.append(h('div.workout-head', {}, [
+    // Beenden/Abbrechen bewusst unauffällig hinter „⋯“ – der Weg nach vorn ist „Weiter“ unten
     h('div.row.between', {}, [
-      h('button.btn.sm.ghost', { text: 'Abbrechen', onclick: cancel }),
+      h('div.wk-head-spacer'),
       h('div.center.grow', {}, [h('div.title.truncate', { text: w.planName + (w.deload ? ' · Deload' : '') }), h('div', {}, [elapsedEl, restMini])]),
-      h('button.btn.sm.primary', { text: 'Beenden', onclick: finish }),
+      h('button.btn.icon.ghost.wk-head-more', { 'aria-label': 'Optionen', html: svgIcon.more, onclick: () => actionSheet('Training', [
+        { label: 'Training vorzeitig beenden & speichern', fn: finish },
+        { label: 'Training abbrechen (verwerfen)', danger: true, fn: cancel },
+      ]) }),
     ]),
     progressEl,
   ]));
@@ -93,8 +97,9 @@ export function render(root, { navigate }) {
     const i = w.currentIndex, n = w.entries.length;
     const cur = w.entries[i];
     const curDone = cur.sets.length && cur.sets.every(s => s.done);
-    nav.append(h('button.btn.ghost', { html: svgIcon.back + '<span>Zurück</span>', disabled: i === 0, onclick: () => go(i - 1) }));
-    if (i < n - 1) nav.append(h('button.btn' + (curDone ? '.primary' : ''), { html: '<span>Weiter</span>' + svgIcon.chevron.replace('class="chev"', 'style="fill:currentColor;width:20px;height:20px"'), onclick: () => go(i + 1) }));
+    nav.append(h('button.btn.ghost.wk-back', { html: svgIcon.back + '<span>Zurück</span>', disabled: i === 0, onclick: () => go(i - 1) }));
+    // „Weiter“ ist immer die Hauptaktion; solange Sätze offen sind, etwas gedämpft
+    if (i < n - 1) nav.append(h('button.btn.primary.wk-next' + (curDone ? '' : '.soft'), { html: '<span>Weiter</span>' + svgIcon.chevron.replace('class="chev"', 'style="fill:currentColor;width:20px;height:20px"'), onclick: () => go(i + 1) }));
     else nav.append(h('button.btn.good', { html: svgIcon.check + '<span>Abschließen</span>', onclick: finish }));
   };
 

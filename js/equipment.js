@@ -148,7 +148,10 @@ export const PHOTOS = {
   seated_row_cable: { file: 'img/equip/seated_row_cable.jpg', title: 'Woman using a seated cable row machine at the gym', author: 'Miguel Angel Omaña Rojas', license: 'CC0', url: 'https://commons.wikimedia.org/wiki/File:Woman_using_a_seated_cable_row_machine_at_the_gym.jpg' },
   incline_bench: { file: 'img/equip/incline_bench.jpg', title: 'Incline bench', author: 'Teemeah', license: 'CC BY-SA 4.0', url: 'https://commons.wikimedia.org/wiki/File:Incline_bench.jpg' },
   hack_squat: { file: 'img/equip/hack_squat.jpg', title: 'HackSquatMachineExercise', author: 'GeorgeStepanek', license: 'CC BY-SA 3.0', url: 'https://commons.wikimedia.org/wiki/File:HackSquatMachineExercise.JPG' },
-  pec_deck: { file: 'img/equip/pec_deck.jpg', title: "Lee Priest Sam's Fitness Pec Fly", author: "Sam's Fitness - Gym Equipment", license: 'CC BY 3.0', url: 'https://commons.wikimedia.org/wiki/File:Lee_Priest_Sam%27s_Fitness_Pec_Fly.jpg' },
+  pec_deck: { file: 'img/equip/pec_deck.jpg', title: 'MT3110 Pec Fly / Rear Delt', author: 'haswell.fitness (Flickr)', license: 'CC BY-SA 2.0', url: 'https://www.flickr.com/photos/127311295@N06/26816795127' },
+  leg_curl_seated: { file: 'img/equip/leg_curl_seated.jpg', title: 'MT2207 Seated Leg Curl', author: 'haswell.fitness (Flickr)', license: 'CC BY-SA 2.0', url: 'https://www.flickr.com/photos/127311295@N06/29180754494' },
+  row_machine: { file: 'img/equip/row_machine.jpg', title: 'MT2204 Seated Row', author: 'haswell.fitness (Flickr)', license: 'CC BY-SA 2.0', url: 'https://www.flickr.com/photos/127311295@N06/29515708190' },
+  calf_seated: { file: 'img/equip/calf_seated.jpg', title: 'MT3109 Seated Calf', author: 'haswell.fitness (Flickr)', license: 'CC BY-SA 2.0', url: 'https://www.flickr.com/photos/127311295@N06/27815825428' },
   dumbbells: { file: 'img/equip/dumbbells.jpg', title: 'A close-up view of a set of heavy dumbbells', author: 'Shixart1985', license: 'CC BY 2.0', url: 'https://commons.wikimedia.org/wiki/File:A_close-up_view_of_a_set_of_heavy_dumbbells.jpg' },
   barbell: { file: 'img/equip/barbell.jpg', title: 'Barbell at FIBO 2019 in Cologne, Germany', author: 'dronepicr', license: 'CC BY 2.0', url: 'https://commons.wikimedia.org/wiki/File:Barbell_at_FIBO_2019_in_Cologne,_Germany_(47952426067).jpg' },
 };
