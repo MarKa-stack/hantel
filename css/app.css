@@ -1452,3 +1452,15 @@ details.credits a { color: var(--text-2); }
 :root:not([data-theme="light"]) .tabbar { background: color-mix(in srgb, #161c2a 84%, transparent); }
 :root:not([data-theme="light"]) .view.wk-view { background: radial-gradient(120% 34% at 50% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%); }
 .week-strip .days { background: var(--surface); }
+
+/* ---------- Essen (1.21): Mahlzeiten einklappbar ---------- */
+.meal-card { padding: 10px 12px 10px 10px; }
+.meal-head { display: flex; align-items: center; gap: 8px; cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none; }
+.meal-chev { flex: none; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); }
+.meal-chev svg { width: 18px; height: 18px; fill: currentColor; transition: transform 0.2s ease; }
+.meal-card.open .meal-chev svg { transform: rotate(90deg); }
+.meal-head .kcal { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; flex: none; }
+.meal-head .min0 { min-width: 0; }
+.meal-body { margin: 6px 0 0 32px; }
+.meal-body .food-row:first-child { border-top: 0; }
+.meal-body .food-row:last-child { padding-bottom: 4px; }

@@ -10,6 +10,10 @@ import { openPhotoSheet } from './food-photo.js';
 
 let curKey = dateKey();
 let unsub = null;
+// Aufgeklappte Mahlzeiten (Standard: alle zu) – wird gemerkt, damit der Tag so aussieht wie man ihn verlassen hat
+const OPEN_KEY = 'hantel.mealsOpen';
+const openMeals = new Set((() => { try { return JSON.parse(localStorage.getItem(OPEN_KEY) || '[]'); } catch { return []; } })());
+function saveOpenMeals() { try { localStorage.setItem(OPEN_KEY, JSON.stringify([...openMeals])); } catch { /* egal */ } }
 
 export function render(root, ctx) {
   if (ctx.sub === 'recipes') return renderRecipes(root, ctx);
@@ -48,26 +52,36 @@ function renderDay(root, { navigate, query }) {
     // Ringe / Balken
     root.append(macroCard(tot, t, navigate));
 
-    // Mahlzeiten
+    // Mahlzeiten – je eine einklappbare Karte, damit der Tag nicht so voll wirkt
     const yesterdayKey = dateKey(ts - 86400000);
     for (const [meal, label] of MEALS) {
       const entries = getDay(curKey).filter(e => e.meal === meal);
       const mt = mealTotals(curKey, meal);
-      const card = h('div.card.meal-card');
+      const open = openMeals.has(meal);
+      const card = h('div.card.meal-card' + (open ? '.open' : ''));
+      const added = () => { openMeals.add(meal); saveOpenMeals(); draw(); }; // nach dem Eintragen aufklappen
       // „⋯“: Mahlzeit als Rezept merken (z.B. das tägliche Frühstück) oder leeren
       const menu = () => actionSheet(label, [
         { label: 'Als Rezept speichern', fn: () => saveMealAsRecipe(entries, label) },
         { label: 'Alle Einträge löschen', danger: true, fn: () => { for (const e of entries) deleteDiaryEntry(curKey, e.id); draw(); } },
       ]);
-      card.append(h('div.row.between', {}, [
-        h('div', {}, [h('div.meal-title', { text: label }), entries.length ? h('div.small.faint', { text: `${fmtKcal(mt.kcal)} kcal · ${fmtG(mt.protein)} g Protein` }) : null]),
+      const sub = !entries.length ? 'Nichts eingetragen'
+        : open ? `${fmtG(mt.protein)} g Protein · ${entries.length} ${entries.length === 1 ? 'Eintrag' : 'Einträge'}`
+        : entries.map(e => e.name).join(', ');
+      const stop = (fn) => (ev) => { ev.stopPropagation(); fn(); };
+      card.append(h('div.meal-head', { role: 'button', 'aria-expanded': String(open), onclick: () => { if (openMeals.has(meal)) openMeals.delete(meal); else openMeals.add(meal); saveOpenMeals(); draw(); } }, [
+        h('span.meal-chev', { html: svgIcon.chevron }),
+        h('div.grow.min0', {}, [h('div.meal-title', { text: label }), h('div.small.faint.truncate', { text: sub })]),
+        entries.length ? h('div.kcal', { text: fmtKcal(mt.kcal) }) : null,
         h('div.row', { style: { gap: '4px' } }, [
-          entries.length ? h('button.btn.sm.ghost.icon', { 'aria-label': 'Mehr', html: svgIcon.more, onclick: menu }) : null,
-          h('button.btn.sm.ghost.icon', { 'aria-label': `${label} hinzufügen`, html: svgIcon.plus, onclick: () => openAddSheet(meal, curKey, draw) }),
+          entries.length ? h('button.btn.sm.ghost.icon', { 'aria-label': 'Mehr', html: svgIcon.more, onclick: stop(menu) }) : null,
+          h('button.btn.sm.ghost.icon', { 'aria-label': `${label} hinzufügen`, html: svgIcon.plus, onclick: stop(() => openAddSheet(meal, curKey, added)) }),
         ]),
       ]));
+      const body = h('div.meal-body');
+      body.hidden = !open;
       for (const e of entries) {
-        card.append(h('div.food-row', { onclick: () => openEntrySheet(curKey, e, draw) }, [
+        body.append(h('div.food-row', { onclick: () => openEntrySheet(curKey, e, draw) }, [
           h('div.grow', {}, [
             h('div.truncate', { html: escapeHtml(e.name) + (e.source === 'ai_image' ? ' <span class="pill accent sm">KI-Schätzung</span>' : ''), style: { fontWeight: 600 } }),
             h('div.small.faint', { text: (e.kind === 'recipe' ? `${String(e.servings).replace('.', ',')} Portion${e.servings === 1 ? '' : 'en'} · ` : `${e.grams} g · `) + `${fmtG(e.protein)} g P · ${fmtG(e.carbs)} g KH · ${fmtG(e.fat)} g F` }),
@@ -77,11 +91,12 @@ function renderDay(root, { navigate, query }) {
       }
       if (!entries.length) {
         const yN = getDay(yesterdayKey).filter(e => e.meal === meal).length;
-        card.append(h('div.row', { style: { gap: '10px' } }, [
-          h('button.food-empty', { text: 'Hinzufügen …', style: { width: 'auto' }, onclick: () => openAddSheet(meal, curKey, draw) }),
-          yN ? h('button.btn.sm.ghost', { text: `Wie gestern (${yN})`, onclick: () => { copyDiaryDay(yesterdayKey, curKey, meal); toast(`${label} von gestern übernommen`); draw(); } }) : null,
+        body.append(h('div.row', { style: { gap: '10px' } }, [
+          h('button.food-empty', { text: 'Hinzufügen …', style: { width: 'auto' }, onclick: () => openAddSheet(meal, curKey, added) }),
+          yN ? h('button.btn.sm.ghost', { text: `Wie gestern (${yN})`, onclick: () => { copyDiaryDay(yesterdayKey, curKey, meal); toast(`${label} von gestern übernommen`); added(); } }) : null,
         ]));
       }
+      card.append(body);
       root.append(card);
     }
 
