@@ -2,7 +2,7 @@
 import { h, svgIcon, fmtWeight, confirmSheet, toast, illustration } from '../util.js';
 import { getPlan, startWorkout, getActiveWorkout, cancelWorkout, getSettings } from '../store.js';
 import { unlockAudio } from '../timer.js';
-import { colorFor } from './plans.js';
+import { colorFor, openPlanMenu } from './plans.js';
 import { openExerciseInfo, figureThumb } from './exercise-info.js';
 import { findExercise } from '../exercise-db.js';
 import { bodyMapSvg, musclesFor, findCustomExercise, MUSCLE_NAME } from '../muscles.js';
@@ -43,7 +43,10 @@ export function render(root, { params, query, navigate }) {
       h('div', { html: bodyMapSvg('front', focus, { mode: 'session', mono: true, still: true }) }),
       h('div', { html: bodyMapSvg('back', focus, { mode: 'session', mono: true, still: true }) }),
     ]) : null,
-    h('button.btn.icon.ghost', { 'aria-label': 'Bearbeiten', html: svgIcon.edit, onclick: () => navigate('/plan/' + plan.id + '/edit') }),
+    h('div.row', { style: { gap: '6px', flex: 'none' } }, [
+      h('button.btn.icon.ghost', { 'aria-label': 'Bearbeiten', html: svgIcon.edit, onclick: () => navigate('/plan/' + plan.id + '/edit') }),
+      h('button.btn.icon.ghost', { 'aria-label': 'Optionen', html: svgIcon.more, onclick: () => openPlanMenu(plan, navigate) }),
+    ]),
   ]));
 
   // Hinweise zum Plan: eine Zeile, Tipp klappt auf

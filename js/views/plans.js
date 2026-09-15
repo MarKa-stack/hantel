@@ -1,4 +1,4 @@
-// Startbildschirm: Dashboard (Heute dran, Wochenring, Serie, letztes PR) + Pläne
+// Startbildschirm: Dashboard (Heute dran mit Muskelfokus, Erholung, Kacheln) + Pläne mit Direktstart
 import { h, svg, svgIcon, toast, actionSheet, confirmSheet, promptSheet, relativeDay, fmtDate, illustration, iconBox, fmtNum, weekKey, isoWeek } from '../util.js';
 import { getPlans, addPlan, newPlan, deletePlan, duplicatePlan, movePlan, getSessions, getActiveWorkout, subscribe, getSettings, updateSettings, sessionVolume, deloadActive } from '../store.js';
 import { sessionPRs, fmtKg, plateauedExercises } from '../progression.js';
@@ -20,18 +20,20 @@ export function render(root, { navigate }) {
     const greeting = hour < 5 ? 'Gute Nacht' : hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Hallo' : 'Guten Abend';
     const name = (settings.name || '').trim();
 
-    root.append(h('div.page-head', {}, [
+    root.append(h('div.page-head.home-head', {}, [
       h('div', {}, [h('div.eyebrow', { text: `${fmtDate(Date.now())} · KW ${isoWeek(Date.now())}` }), h('h1', { text: name ? `${greeting}, ${name}` : greeting })]),
+      h('button.avatar', { 'aria-label': 'Profil & Einstellungen', text: name ? name[0].toUpperCase() : '', html: name ? undefined : svgIcon.body, onclick: () => navigate('/settings') }),
     ]));
 
     // Laufendes Workout
     if (active) {
       const done = active.entries.reduce((a, e) => a + e.sets.filter(s => s.done).length, 0);
       const total = active.entries.reduce((a, e) => a + e.sets.length, 0);
-      root.append(h('div.hero', { onclick: () => navigate('/workout'), style: { cursor: 'pointer' } }, [
+      root.append(h('div.hero.live', { onclick: () => navigate('/workout'), style: { cursor: 'pointer' } }, [
         h('div.eyebrow', { html: svgIcon.clock + '<span>Läuft gerade</span>' }),
         h('h2', { text: active.planName }),
-        h('div.meta', { text: `${done} von ${total} Sätzen · Übung ${(active.currentIndex ?? 0) + 1} von ${active.entries.length}` }),
+        h('div.meta-pills', {}, [h('span.mp', { text: `${done}/${total} Sätze` }), h('span.mp', { text: `Übung ${(active.currentIndex ?? 0) + 1}/${active.entries.length}` })]),
+        h('div.hero-bar', {}, [h('i', { style: { width: `${total ? Math.round((done / total) * 100) : 0}%` } })]),
         h('button.btn.primary.block', { html: svgIcon.play + '<span>Weiter trainieren</span>' }),
       ]));
     }
@@ -43,16 +45,22 @@ export function render(root, { navigate }) {
       const nextLast = [...sessions].reverse().find(s => s.planId === nextPlan.id);
       const deload = settings.deloadUntil && settings.deloadUntil > Date.now();
       root.append(h('div.hero', {}, [
-        h('div.eyebrow', { html: svgIcon.calendar + `<span>${deload ? 'Deload-Woche · Heute dran' : 'Heute dran'}</span>` }),
-        h('h2', { text: nextPlan.name }),
-        h('div.meta', { text: [
-          `${nextPlan.exercises.length} Übungen · ${nextPlan.exercises.reduce((a, e) => a + (e.sets || 0), 0)} Sätze`,
-          nextLast ? `zuletzt ${lc(relativeDay(nextLast.startedAt))}` : 'noch nie trainiert',
-        ].join(' · ') }),
+        h('div.row.between', { style: { alignItems: 'flex-start' } }, [
+          h('div.grow', {}, [
+            h('div.eyebrow', { html: svgIcon.calendar + `<span>${deload ? 'Deload-Woche · Heute dran' : 'Heute dran'}</span>` }),
+            h('h2', { text: nextPlan.name }),
+          ]),
+          planThumb(nextPlan, 'hero'),
+        ]),
+        h('div.meta-pills', {}, [
+          h('span.mp', { text: `${nextPlan.exercises.length} Übungen` }),
+          h('span.mp', { text: `${nextPlan.exercises.reduce((a, e) => a + (e.sets || 0), 0)} Sätze` }),
+          h('span.mp', { text: nextLast ? `zuletzt ${lc(relativeDay(nextLast.startedAt))}` : 'noch nie' }),
+        ]),
         sessions.length ? h('div.meta.reason', { text: sug.reason }) : null,
         h('button.btn.primary.block', { html: svgIcon.play + '<span>Training starten</span>', onclick: () => navigate('/plan/' + nextPlan.id + '?start=1') }),
         sug.rotationNext.id !== nextPlan.id
-          ? h('button.btn.sm.ghost.block', { text: `Lieber ${sug.rotationNext.name} (nächster laut Reihenfolge)`, style: { marginTop: '8px' }, onclick: () => navigate('/plan/' + sug.rotationNext.id + '?start=1') })
+          ? h('button.link-btn', { text: `Lieber ${sug.rotationNext.name} (nächster laut Reihenfolge)`, onclick: () => navigate('/plan/' + sug.rotationNext.id + '?start=1') })
           : null,
       ]));
     }
@@ -63,11 +71,11 @@ export function render(root, { navigate }) {
       const ratios = fatigueRatios(status);
       const tired = MUSCLES.filter(([k]) => status[k].state === 'tired').map(([, n]) => n);
       const fresh = MUSCLES.filter(([k]) => status[k].state === 'fresh' && status[k].lastAt).map(([, n]) => n);
-      root.append(h('div.card.tappable.recovery', { onclick: () => navigate('/muscles') }, [
-        h('div.row', { style: { gap: '12px', alignItems: 'center' } }, [
+      root.append(h('div.card.tappable.recovery.row-card', { onclick: () => navigate('/muscles') }, [
+        h('div.row', {}, [
           h('div.recovery-maps', { html: bodyMapSvg('front', null, { ratios, mono: true, still: true }) + bodyMapSvg('back', null, { ratios, mono: true, still: true }) }),
           h('div.grow', {}, [
-            h('div.title-ico', { html: svgIcon.body + '<b>Erholung</b>' }),
+            h('b', { text: 'Erholung' }),
             h('div.small.muted', { style: { marginTop: '4px' }, text: tired.length ? `Noch müde: ${tired.join(', ')}` : 'Alle Muskelgruppen erholt.' }),
             fresh.length && tired.length ? h('div.small.faint', { text: `Erholt: ${fresh.slice(0, 4).join(', ')}${fresh.length > 4 ? ' …' : ''}` }) : null,
           ]),
@@ -80,7 +88,7 @@ export function render(root, { navigate }) {
     if (!active && sessions.length && !deloadActive()) {
       const stuck = plateauedExercises();
       if (stuck.length >= 3) {
-        root.append(h('div.card.alert-card', { style: { marginBottom: '12px' } }, [
+        root.append(h('div.card.alert-card.row-card', {}, [
           h('div.title-ico', { html: svgIcon.warning + `<b>${stuck.length} Übungen stagnieren</b>` }),
           h('div.small.muted', { style: { marginTop: '4px' }, text: stuck.slice(0, 3).map(p => p.name).join(', ') + (stuck.length > 3 ? ' …' : '') + ' – seit mehreren Wochen kein neues Bestes.' }),
           h('div.row', { style: { gap: '8px', marginTop: '10px' } }, [
@@ -101,10 +109,11 @@ export function render(root, { navigate }) {
       if (t.ready || tot.kcal > 0) {
         const pctK = t.ready ? Math.min(100, Math.round((tot.kcal / t.kcal) * 100)) : 0;
         const pctP = t.ready ? Math.min(100, Math.round((tot.protein / t.protein) * 100)) : 0;
-        root.append(h('div.card.tappable.food-tile', { onclick: () => navigate('/food'), style: { marginBottom: '12px' } }, [
-          h('div.row.between', {}, [
+        root.append(h('div.card.tappable.food-tile.row-card', { onclick: () => navigate('/food') }, [
+          h('div.row', {}, [
+            iconBox('food'),
             h('div.grow', {}, [
-              h('div.title-ico', { html: svgIcon.food + '<b>Essen heute</b>' }),
+              h('b', { text: 'Essen heute' }),
               h('div.small.muted', { style: { marginTop: '4px' }, text: t.ready ? `${fmtKcal(tot.kcal)} / ${fmtKcal(t.kcal)} kcal · Protein ${Math.round(tot.protein)} / ${t.protein} g` : `${fmtKcal(tot.kcal)} kcal · ${Math.round(tot.protein)} g Protein` }),
               t.ready ? h('div.mini-bars', {}, [h('span.track', {}, [h('i.k', { style: { width: pctK + '%' } })]), h('span.track', {}, [h('i.p', { style: { width: pctP + '%' } })])]) : null,
             ]),
@@ -123,10 +132,11 @@ export function render(root, { navigate }) {
       if (last.list.length && (dow <= 2 || thisN === 0)) {
         const prev = weekStats(sessions, lastWk - 7 * 86400000);
         const dVol = last.volume - prev.volume;
-        root.append(h('div.card.tappable.review', { onclick: () => navigate('/week/' + lastWk), style: { marginBottom: '12px' } }, [
-          h('div.row.between', {}, [
+        root.append(h('div.card.tappable.review.row-card', { onclick: () => navigate('/week/' + lastWk) }, [
+          h('div.row', {}, [
+            iconBox('calendar', 'good'),
             h('div.grow', {}, [
-              h('div.title-ico', { html: svgIcon.calendar + `<b>Deine Woche · KW ${isoWeek(lastWk)}</b>` }),
+              h('b', { text: `Deine Woche · KW ${isoWeek(lastWk)}` }),
               h('div.small.muted', { style: { marginTop: '4px' }, text: `${last.list.length} Training${last.list.length === 1 ? '' : 's'} · ${fmtNum(last.volume)} ${settings.unit}` + (prev.list.length ? ` (${dVol >= 0 ? '+' : ''}${fmtNum(dVol)})` : '') + ` · ${last.prs.length} PR${last.prs.length === 1 ? '' : 's'}` }),
             ]),
             h('div', { html: svgIcon.chevron }),
@@ -203,13 +213,14 @@ export function render(root, { navigate }) {
         const last = [...sessions].reverse().find(s => s.planId === p.id);
         const meta = [`${p.exercises.length} Übung${p.exercises.length === 1 ? '' : 'en'}`];
         if (last) meta.push('zuletzt ' + lc(relativeDay(last.startedAt)));
+        // Tippen öffnet den Plan, Play startet direkt; Optionen (Duplizieren, Löschen …) per ⋯
         const card = h('div.card.tappable.plan-card', { onclick: () => navigate('/plan/' + p.id) }, [
           planThumb(p),
           h('div.grow', {}, [
             h('div.truncate', { text: p.name, style: { fontWeight: 700, fontSize: '17px' } }),
             h('div.meta', { text: meta.join(' · ') }),
           ]),
-          h('button.btn.icon.ghost', { 'aria-label': 'Optionen', html: svgIcon.more, onclick: (e) => { e.stopPropagation(); planMenu(p); } }),
+          p.exercises.length ? h('button.btn.icon.primary.plan-play', { 'aria-label': 'Training starten', html: svgIcon.play, onclick: (e) => { e.stopPropagation(); navigate('/plan/' + p.id + '?start=1'); } }) : null,
         ]);
         list.append(card);
       }
@@ -224,34 +235,35 @@ export function render(root, { navigate }) {
     navigate('/plan/' + p.id + '/edit');
   };
 
-  const planMenu = (p) => {
-    actionSheet(p.name, [
-      { label: 'Training starten', fn: () => navigate('/plan/' + p.id + '?start=1') },
-      { label: 'Bearbeiten', fn: () => navigate('/plan/' + p.id + '/edit') },
-      { label: 'Duplizieren', fn: () => { duplicatePlan(p.id); toast('Plan dupliziert'); } },
-      { label: 'Nach oben', fn: () => movePlan(p.id, -1) },
-      { label: 'Nach unten', fn: () => movePlan(p.id, 1) },
-      { label: 'Löschen', danger: true, fn: async () => {
-        if (await confirmSheet({ title: `„${p.name}“ löschen?`, text: 'Dein Trainingsverlauf bleibt erhalten.', okLabel: 'Löschen', danger: true })) {
-          deletePlan(p.id); toast('Plan gelöscht');
-        }
-      } },
-    ]);
-  };
-
   draw();
   unsub = subscribe(() => { if (location.hash === '#/plans' || location.hash === '') draw(); });
 }
 
 export function unmount() { unsub?.(); unsub = null; }
 
-/** Mini-Körperkarte mit den Muskeln, die der Plan trifft */
-function planThumb(plan) {
+/** Plan-Optionen (⋯) – in der Plan-Ansicht; nach dem Löschen geht es zurück zur Startseite */
+export function openPlanMenu(p, navigate) {
+  actionSheet(p.name, [
+    { label: 'Bearbeiten', fn: () => navigate('/plan/' + p.id + '/edit') },
+    { label: 'Duplizieren', fn: () => { duplicatePlan(p.id); toast('Plan dupliziert'); navigate('/plans'); } },
+    { label: 'Nach oben', fn: () => { movePlan(p.id, -1); toast('Verschoben'); } },
+    { label: 'Nach unten', fn: () => { movePlan(p.id, 1); toast('Verschoben'); } },
+    { label: 'Löschen', danger: true, fn: async () => {
+      if (await confirmSheet({ title: `„${p.name}“ löschen?`, text: 'Dein Trainingsverlauf bleibt erhalten.', okLabel: 'Löschen', danger: true })) {
+        deletePlan(p.id); toast('Plan gelöscht'); navigate('/plans', true);
+      }
+    } },
+  ]);
+}
+
+/** Mini-Körperkarte mit den Muskeln, die der Plan trifft (variant 'hero': größer, beide Seiten) */
+function planThumb(plan, variant = '') {
   const fake = { entries: plan.exercises.map(e => ({ name: e.name, sets: Array.from({ length: Math.max(1, e.sets || 1) }, () => ({ done: true })) })) };
   const ms = muscleSets([fake]);
   const upper = ['chest', 'back', 'front_delt', 'side_delt', 'rear_delt', 'biceps', 'triceps'].reduce((a, k) => a + ms.totals[k], 0);
   const lower = ['quads', 'hamstrings', 'glutes', 'calves'].reduce((a, k) => a + ms.totals[k], 0);
   const side = lower > upper ? 'front' : (ms.totals.back > ms.totals.chest ? 'back' : 'front');
+  if (variant === 'hero') return h('div.plan-thumb.hero', { html: bodyMapSvg('front', ms.totals, { mode: 'week', still: true, mono: true }) + bodyMapSvg('back', ms.totals, { mode: 'week', still: true, mono: true }) });
   return h('div.plan-thumb', { html: bodyMapSvg(side, ms.totals, { mode: 'week', still: true, mono: true }) });
 }
 
