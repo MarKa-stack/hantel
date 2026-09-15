@@ -57,25 +57,31 @@ export function joints(pose, view) {
 
 function P(...pts) { return pts.map((p, i) => (i ? 'L' : 'M') + f(p[0]) + ' ' + f(p[1])).join(' '); }
 
-function bodyPaths(j, view) {
+/**
+ * Körper als Segmente mit eigener Strichstärke (Rumpf breit, Oberarm/Oberschenkel kräftiger als Unterarm/Unterschenkel),
+ * damit die Figur Volumen bekommt statt nur Striche. Hintere Gliedmaßen (Seitenansicht) heller.
+ * @returns {{c:string, d:string, back?:boolean}[]}
+ */
+function bodySegments(j, view) {
   if (view === "top") {
-    return { back: "", body: [P(j.shL, j.shR), P(j.shL, j.elbL, j.wrL), P(j.shR, j.elbR, j.wrR)].join(" ") };
+    return [{ c: 'shoulders', d: P(j.shL, j.shR) }, { c: 'uarm', d: P(j.shL, j.elbL, j.wrL) }, { c: 'uarm', d: P(j.shR, j.elbR, j.wrR) }];
   }
   if (view === "front") {
-    return {
-      back: '',
-      body: [
-        P(j.sh, j.hip),
-        P(j.hipL, j.kneeL, j.ankL), P(j.hipR, j.kneeR, j.ankR),
-        P(j.shL, j.shR),
-        P(j.shL, j.elbL, j.wrL), P(j.shR, j.elbR, j.wrR),
-      ].join(' '),
-    };
+    return [
+      { c: 'neck', d: P(j.sh, j.head) }, { c: 'torso', d: P(j.sh, j.hip) }, { c: 'shoulders', d: P(j.shL, j.shR) }, { c: 'hips', d: P(j.hipL, j.hipR) },
+      { c: 'thigh', d: P(j.hipL, j.kneeL) }, { c: 'shin', d: P(j.kneeL, j.ankL) },
+      { c: 'thigh', d: P(j.hipR, j.kneeR) }, { c: 'shin', d: P(j.kneeR, j.ankR) },
+      { c: 'uarm', d: P(j.shL, j.elbL) }, { c: 'farm', d: P(j.elbL, j.wrL) },
+      { c: 'uarm', d: P(j.shR, j.elbR) }, { c: 'farm', d: P(j.elbR, j.wrR) },
+    ];
   }
-  return {
-    back: [P(j.hip, j.knee2, j.ank2, j.toe2), P(j.sh, j.elb2, j.wr2)].join(' '),
-    body: [P(j.sh, j.hip), P(j.hip, j.knee, j.ank, j.toe), P(j.sh, j.elb, j.wr)].join(' '),
-  };
+  return [
+    { c: 'thigh', d: P(j.hip, j.knee2), back: true }, { c: 'shin', d: P(j.knee2, j.ank2, j.toe2), back: true },
+    { c: 'uarm', d: P(j.sh, j.elb2), back: true }, { c: 'farm', d: P(j.elb2, j.wr2), back: true },
+    { c: 'neck', d: P(j.sh, j.head) }, { c: 'torso', d: P(j.hip, j.sh) },
+    { c: 'thigh', d: P(j.hip, j.knee) }, { c: 'shin', d: P(j.knee, j.ank, j.toe) },
+    { c: 'uarm', d: P(j.sh, j.elb) }, { c: 'farm', d: P(j.elb, j.wr) },
+  ];
 }
 
 /** Bewegliche Ausrüstung: Primitive, die an Gelenken hängen */
@@ -137,10 +143,10 @@ export function renderFigure(fig, opts = {}) {
   const animate = opts.animate !== false && fig.poses.length > 1;
   const [A, B] = fig.poses.length > 1 ? fig.poses : [fig.poses[0], fig.poses[0]];
   const jA = joints(A, view), jB = joints(B, view);
-  const pA = bodyPaths(jA, view), pB = bodyPaths(jB, view);
+  const sA = bodySegments(jA, view), sB = bodySegments(jB, view);
   const dur = fig.dur ?? 2.8;
   const single = opts.pose ?? 1; // Thumbnail: Endposition
-  const jS = single ? jB : jA, pS = single ? pB : pA;
+  const jS = single ? jB : jA, sS = single ? sB : sA;
 
   const parts = [];
   for (const s of fig.static || []) parts.push(staticSvg(s));
@@ -153,10 +159,11 @@ export function renderFigure(fig, opts = {}) {
     else parts.push(`<path class="${cls}" d="${equipPath(m, jS)}"/>`);
   }
 
-  if (view === "side") {
-    parts.push(animate ? `<path class="limb back" d="${pA.back}">${anim('d', pA.back, pB.back, dur)}</path>` : `<path class="limb back" d="${pS.back}"/>`);
-  }
-  parts.push(animate ? `<path class="limb" d="${pA.body}">${anim('d', pA.body, pB.body, dur)}</path>` : `<path class="limb" d="${pS.body}"/>`);
+  // Gelenke als runde Linienenden; Reihenfolge: hintere Gliedmaßen, Rumpf, vordere Gliedmaßen
+  sA.forEach((seg, k) => {
+    const cls = `limb seg-${seg.c}${seg.back ? ' back' : ''}`;
+    parts.push(animate ? `<path class="${cls}" d="${seg.d}">${anim('d', seg.d, sB[k].d, dur)}</path>` : `<path class="${cls}" d="${sS[k].d}"/>`);
+  });
   const hd = animate
     ? `<circle class="head" cx="${f(jA.head[0])}" cy="${f(jA.head[1])}" r="${L.headR}">${anim('cx', f(jA.head[0]), f(jB.head[0]), dur)}${anim('cy', f(jA.head[1]), f(jB.head[1]), dur)}</circle>`
     : `<circle class="head" cx="${f(jS.head[0])}" cy="${f(jS.head[1])}" r="${L.headR}"/>`;

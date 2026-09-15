@@ -5,19 +5,19 @@ Kein Build-Schritt, kein Backend – reines HTML/CSS/JavaScript, Daten bleiben a
 
 ## Funktionen
 
-- **Trainingspläne** anlegen, bearbeiten, duplizieren (Sätze × Wdh × Gewicht × Pause pro Übung)
+- **Trainingspläne** anlegen, bearbeiten, duplizieren (Sätze × Wdh × Gewicht × Pause pro Übung); Plan-Ansicht mit Muskelfokus (zwei Mini-Körperkarten), Chips je Übung (Sätze · Wdh · Gewicht) und klebendem Start-Button
 - **PDF-Import**: Trainingsplan als PDF auswählen → Übungen werden erkannt → prüfen → speichern
   - *Mustererkennung*: offline, erkennt Tabellen (Übung | Sätze | Wdh | Gewicht | Pause) und Freitext („Bankdrücken 3 x 10 @ 60 kg“, „3 Sätze à 12 Wdh“)
   - *KI (optional)*: mit eigenem Claude- **oder OpenAI-API-Key** (Umschalter unter „Mehr → KI“, `js/llm.js`) liest die KI das PDF direkt – auch gescannte PDFs
-- **Trainingsmodus**: eine Übung pro Seite mit Bild, Zielmuskeln, Fortschritt („Übung 3 von 8“), großen ±-Steppern für Gewicht/Wdh, „Letztes Training“ + „Heute empfohlen“, feste Navigation (Vorherige/Nächste/Abschließen), Auto-Speichern, automatischer **Pausentimer** mit Ton
+- **Trainingsmodus**: eine Übung pro Seite mit Übungsleiste (Bildchen aller Übungen, Haken bei erledigten, tippen springt), Satztabelle (Nr · kg · Wdh · RIR · Haken – Werte direkt tippbar, ± in der aktuellen Zeile, RIR per Tipp durchzählen), Details hinter „⋯“ (Tipps, Scheibenrechner, Notiz, Maschineneinstellungen, Tauschen), „Letztes Training“ + „Heute empfohlen“, feste Navigation (Vorherige/Nächste/Abschließen), Auto-Speichern, automatischer **Pausentimer** mit Ton
 - **Double Progression**: Empfehlung pro Übung aus der Historie (alle Sätze am oberen Ende des Bereichs → +Gewichtsschritt, sonst Gewicht halten); Gewichtsschritt pro Übung konfigurierbar (Standard: Kurzhantel 2 kg, Maschine/Kabel 5 kg, Langhantel 2,5 kg); Hinweis bei Leistungsabfall, Reduzierung bleibt beim Nutzer
 - **PR-Erkennung**: höchstes Gewicht, meiste Wdh je Gewicht, bestes e1RM (Epley), höchstes Einheiten-Volumen – dezente Animation direkt nach dem Satz, Bereich „Rekorde“ je Übung
 - **Timer-Seite**: Countdown mit Presets + Stoppuhr (zeitstempelbasiert, stimmt auch nach Sperrbildschirm)
 - **Fortschritt**: Workouts pro Woche, Volumen, Serie; je Übung Kennzahlen (Bestes Gewicht, Top-Satz, e1RM, Volumen, Wdh) × Zeiträume (1M/3M/6M/1J/Gesamt) mit Tooltip (Datum, Gewicht × Wdh, Satz, e1RM), Veränderung („+13 kg in 5 Monaten“), Statistik und Rekorde
-- **Muskelgruppen**: Sätze je Muskelgruppe (primär 1,0 / sekundär 0,5) pro Woche als Balken + Körperkarte Vorder-/Rückseite (grün = leicht … rot = intensiv), Tipp auf Muskel → diese/letzte Woche, 4-Wochen-Schnitt, Übungen; Körperkarte auch beim Workout-Abschluss
+- **Muskelgruppen**: Sätze je Muskelgruppe (primär 1,0 / sekundär 0,5) pro Woche als Balken + anatomische Körperkarte Vorder-/Rückseite (Brust, Delta-Köpfe, Bizeps/Trizeps, Bauch/Obliques, Lat/Trapez/Rückenstrecker, Gesäß, Quadrizeps, Beinbeuger, Waden; grün = leicht … rot = intensiv), Tipp auf Muskel → diese/letzte Woche, 4-Wochen-Schnitt, Übungen; Körperkarte auch beim Workout-Abschluss
 - **Studio-Tools im Training**: Maschineneinstellungen je Übung als Einzeiler (bleiben gespeichert), Scheibenrechner (Tipp aufs Gewicht, Stange 20/15/10 kg oder ohne; bei Maschinen eingeklappt), automatische Aufwärmsätze (40/60/80 %, nur vor dem ersten Arbeitssatz, zählen nicht als Volumen), RIR-Chips je Satz (schärfen die Progression), Übung für heute tauschen (gleiche Muskelgruppe), Supersätze (Pause erst nach der zweiten Übung), Pausentimer klingelt auch bei gesperrtem Bildschirm (lautloses Audio hält die Session offen)
 - **Rund ums Training**: „Heute dran“-Karte mit A/B-Rotation, Gewicht & Maße mit Verlauf, Trainingskalender (Heatmap), vergangene Sessions korrigierbar, 1RM-Prozent-Tabelle je Übung
-- **Übungsbibliothek**: animierte Strichfiguren (Start ↔ Endposition) mit Muskelgruppen und 2–3 Ausführungstipps zu 25 Übungen – im Plan, im Workout (ⓘ) und unter „Mehr“
+- **Übungsbibliothek**: animierte Figuren mit Körpervolumen (Start ↔ Endposition) mit Muskelgruppen und 2–3 Ausführungstipps zu 25 Übungen – im Plan, im Workout (ⓘ) und unter „Mehr“
 - **Vorlagen**: Oberkörper/Unterkörper A+B (4-/5-Tage-Split) werden beim ersten Start angelegt; Zusatztag Samstag optional
 - **Backup**: JSON-Export/-Import unter „Mehr“; alle 10 Workouts erinnert die App an eine Sicherung, `navigator.storage.persist()` wird beim Start angefragt
 - **Cloud-Backup**: privates GitHub-Gist (Token mit Scope „gist“ unter „Mehr“), automatisch nach Workouts/Plan-/Körperänderungen, Wiederherstellen auf neuem Gerät per Token (`js/cloud.js`)
@@ -94,7 +94,7 @@ js/llm.js             KI-Zugang: Hantel-Server (Worker) oder eigener Claude-/Ope
 js/ai-tasks.js        KI-Aufgaben: Prompts, JSON-Schemas, Eingabe-/Antwortprüfung (Client + Worker)
 worker/               Cloudflare Worker (index.js generiert aus worker.src.js + ai-tasks.js), README mit Deploy-Schritten
 js/ai-import.js       PDF → Trainingspläne (über llm.js)
-js/figure.js          Strichfiguren-Renderer (Posen über Gelenkwinkel, SMIL-Animation)
+js/figure.js          Figuren-Renderer (Posen über Gelenkwinkel, Segmente mit Strichstärke, SMIL-Animation)
 js/exercise-db.js     Übungsbibliothek: Figuren, Muskeln, Tipps, Namenszuordnung
 js/templates.js       Eingebaute Plan-Vorlagen + Erststart-Seeding
 js/progression.js     Double Progression, Gewichtsschritte, PR-Erkennung (Epley-e1RM)

@@ -1,4 +1,4 @@
-// Trainingsmodus: eine Übung pro Seite, große Stepper, letztes Training + Empfehlung, PR-Erkennung
+// Trainingsmodus: eine Übung pro Seite, Übungsleiste oben, Satztabelle (Nr · kg · Wdh · RIR · Haken), letztes Training + Empfehlung, PR-Erkennung
 import { h, svgIcon, fmtDuration, fmtNum, fmtShortDate, confirmSheet, openSheet, promptSheet, actionSheet, toast, haptic, parseNum, countUp, escapeHtml } from '../util.js';
 import { getActiveWorkout, touchWorkout, finishWorkout, cancelWorkout, getSettings, sessionVolume, getExerciseSettings, updateExerciseSettings, getSessions } from '../store.js';
 import { restTimer, unlockAudio, keepAlive, setWakeLockWanted } from '../timer.js';
@@ -79,12 +79,19 @@ export function render(root, { navigate }) {
   const nav = h('div.wk-nav');
   root.append(nav);
 
+  // Übungsleiste: ein Bildchen pro Übung (erledigt = Haken, aktuell = Akzent), tippen springt
   const drawProgress = () => {
     progressEl.innerHTML = '';
     w.entries.forEach((e, i) => {
       const allDone = e.sets.length && e.sets.every(s => s.done);
-      progressEl.append(h('i', { class: i === w.currentIndex ? 'cur' : allDone ? 'done' : '' }));
+      const doneN = e.sets.filter(s => s.done).length;
+      progressEl.append(h('button.wk-strip-item' + (i === w.currentIndex ? '.cur' : allDone ? '.done' : ''), { 'aria-label': e.name, title: e.name, onclick: () => go(i) }, [
+        figureThumb(e.name) || h('div.idx', { text: String(i + 1) }),
+        allDone ? h('span.badge', { html: svgIcon.check }) : doneN ? h('span.badge.part', { text: `${doneN}/${e.sets.length}` }) : null,
+      ]));
     });
+    // Aktuelle Übung ins Bild holen
+    requestAnimationFrame(() => progressEl.querySelector('.cur')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }));
   };
 
   const drawNav = () => {
@@ -131,9 +138,17 @@ export function render(root, { navigate }) {
     const prev = w.entries[i - 1], next = w.entries[i + 1];
     const supersetWith = entry.superset && next ? next : (prev?.superset ? prev : null);
 
-    // Kopfbereich der Übung – kompakt, damit Satz und Pausenring ohne Scrollen sichtbar sind
+    // Kopfbereich der Übung – kompakt: Bild, Name, Muskeln, Ziel; alles Weitere hinter „⋯“
     body.append(h('div.wk-step', { text: `Übung ${i + 1} von ${w.entries.length}`, style: { margin: '4px 0 8px' } }));
     const thumb = figureThumb(entry.name);
+    const setup = setupRow(entry);
+    const more = () => actionSheet(entry.name, [
+      { label: 'Ausführung & Tipps', fn: showInfo },
+      { label: 'Gewicht eingeben / Scheibenrechner', fn: () => { const cur = entry.sets.find(s => !s.done) || entry.sets[entry.sets.length - 1]; if (cur) openWeightSheet(entry, cur.weight, (v) => { cur.weight = v; touchWorkout(); drawExercise(); }); } },
+      { label: entry.sessionNote ? 'Notiz bearbeiten' : 'Notiz zur Übung', fn: editNote },
+      { label: 'Maschineneinstellungen', fn: () => setup.edit() },
+      { label: 'Übung tauschen (nur heute)', fn: () => swapExercise(entry) },
+    ]);
     body.append(h('div.wk-ex', {}, [
       thumb ? h('div', { onclick: showInfo }, [thumb]) : null,
       h('div.grow', {}, [
@@ -143,11 +158,7 @@ export function render(root, { navigate }) {
         supersetWith ? h('div', { style: { marginTop: '4px' } }, [h('span.pill.accent', { text: '⇅ Supersatz mit ' + supersetWith.name })]) : null,
         entry.swappedFrom ? h('div.small.faint', { text: `Getauscht (statt ${entry.swappedFrom}) – nur für heute` }) : null,
       ]),
-      h('div.wk-actions', {}, [
-        h('button.btn.icon.ghost', { 'aria-label': 'Ausführung', title: 'Ausführung', html: svgIcon.info, onclick: showInfo }),
-        h('button.btn.icon.ghost', { 'aria-label': 'Übung tauschen', title: 'Tauschen', html: svgIcon.swap, onclick: () => swapExercise(entry) }),
-        h('button.btn.icon.ghost' + (entry.sessionNote ? '.has-note' : ''), { 'aria-label': 'Notiz zur Übung', title: 'Notiz', html: svgIcon.note, onclick: editNote }),
-      ]),
+      h('button.btn.icon.ghost.wk-more' + (entry.sessionNote ? '.has-note' : ''), { 'aria-label': 'Mehr', title: 'Mehr', html: svgIcon.more, onclick: more }),
     ]));
     if (entry.note) body.append(h('p.small.muted', { text: entry.note, style: { marginTop: '8px' } }));
     // Notiz zu dieser Übung in dieser Session („Schulter zwickt bei Satz 3“) – erscheint beim nächsten Mal unter „Zuletzt“
@@ -158,8 +169,8 @@ export function render(root, { navigate }) {
     }
     if (entry.sessionNote) body.append(h('button.wk-setup-line', { style: { marginTop: '8px' }, onclick: editNote }, [h('span.wk-setup-ico', { html: svgIcon.note }), h('span.truncate', { text: entry.sessionNote })]));
 
-    // Maschineneinstellungen (übungsübergreifend gespeichert): Einzeiler, Tipp → Eingabefeld
-    body.append(setupRow(entry));
+    // Maschineneinstellungen (übungsübergreifend gespeichert): Einzeiler nur, wenn etwas gemerkt ist
+    body.append(setup.box);
 
     // Letztes Training + Empfehlung auf einer Zeile; die Begründung nur, wenn sie etwas ändert
     const lastEntry = rec.last?.entry, lastDate = rec.last?.session?.startedAt;
@@ -236,26 +247,25 @@ export function render(root, { navigate }) {
       setsBox.innerHTML = '';
       setsBox.append(warmBox);
       drawWarmup();
-      // Fokus: genau ein Satz ist „aktuell“ (groß), erledigte und kommende sind einzeilig
+      // Genau ein Satz ist „aktuell“ (Akzent, mit ±): der erste offene, oder ein angetippter
       const firstOpen = entry.sets.findIndex(s => !s.done);
-      const cur = entry.expanded != null && entry.sets[entry.expanded] ? entry.expanded : (firstOpen >= 0 ? firstOpen : -1);
-      entry.sets.forEach((set, si) => {
-        if (si === cur && restTimer.active && !set.done && restForEntry === entry) setsBox.append(restCard(entry, set, si));
-        if (si === cur) setsBox.append(setCard(entry, set, si, i, drawSets, si === 0 ? drawWarmup : null));
-        else setsBox.append(setRow(entry, set, si, drawSets));
-      });
-      // Alle Sätze fertig, Pause läuft → Vorschau auf die nächste Übung samt Maschineneinstellungen
-      if (cur === -1 && restTimer.active && restForEntry === entry) {
-        const nextEx = w.entries[i + 1];
-        setsBox.append(restCard(entry, null, null, nextEx ? {
-          title: 'Danach: ' + nextEx.name,
-          lines: [
-            `${nextEx.targetSets} × ${nextEx.targetReps}` + (nextEx.sets[0]?.weight != null ? ` · ${fmtKg(nextEx.sets[0].weight)}` : ''),
-            getExerciseSettings(nextEx.name).setup || null,
-          ].filter(Boolean),
-          action: { label: 'Weiter', fn: () => go(i + 1) },
-        } : { title: 'Letzte Übung geschafft', lines: [], action: { label: 'Abschließen', fn: finish } }));
+      const cur = entry.expanded != null && entry.sets[entry.expanded] && !entry.sets[entry.expanded].done ? entry.expanded : firstOpen;
+      if (restTimer.active && restForEntry === entry) {
+        if (cur >= 0) setsBox.append(restCard(entry, entry.sets[cur], cur));
+        else {
+          // Alle Sätze fertig, Pause läuft → Vorschau auf die nächste Übung samt Maschineneinstellungen
+          const nextEx = w.entries[i + 1];
+          setsBox.append(restCard(entry, null, null, nextEx ? {
+            title: 'Danach: ' + nextEx.name,
+            lines: [
+              `${nextEx.targetSets} × ${nextEx.targetReps}` + (nextEx.sets[0]?.weight != null ? ` · ${fmtKg(nextEx.sets[0].weight)}` : ''),
+              getExerciseSettings(nextEx.name).setup || null,
+            ].filter(Boolean),
+            action: { label: 'Weiter', fn: () => go(i + 1) },
+          } : { title: 'Letzte Übung geschafft', lines: [], action: { label: 'Abschließen', fn: finish } }));
+        }
       }
+      setsBox.append(setTable(entry, cur, i, drawSets, drawWarmup));
       setsBox.append(h('div.add-set', {}, [
         h('button.btn.sm.ghost', { text: '– Satz', disabled: entry.sets.length <= 1 || entry.sets[entry.sets.length - 1].done, onclick: () => { entry.sets.pop(); touchWorkout(); drawSets(); drawProgress(); drawNav(); } }),
         h('button.btn.sm.ghost', { text: '+ Satz', onclick: () => {
@@ -269,16 +279,115 @@ export function render(root, { navigate }) {
     drawSets();
   };
 
-  // ---------- Einzeilige Sätze (erledigt / kommend) ----------
-  const setRow = (entry, set, si, redrawAll) => {
-    const row = h('div.set-row' + (set.done ? '.done' : '.upcoming'), {
-      onclick: () => { entry.expanded = si; touchWorkout(); redrawAll(); },
-    }, [
-      set.done ? h('span.mini-check', { html: svgIcon.check }) : h('span.no', { text: String(si + 1) }),
-      h('span.sum', { text: `${fmtKg(set.weight)} × ${set.reps ?? '–'}` }),
-      h('span.tag', { text: [set.type ? SET_TYPES[set.type].short : '', set.done ? (set.rir != null ? `RIR ${set.rir}` : '') : `Satz ${si + 1}`].filter(Boolean).join(' · ') }),
-    ]);
-    return row;
+  // ---------- Satztabelle: # · kg · Wdh · RIR · Haken – ein Tipp pro Satz ----------
+  const setTable = (entry, cur, exIdx, redrawAll, onWeightChange) => {
+    const step = entry.weightStep || 2.5;
+    const unit = getSettings().unit || 'kg';
+    const table = h('div.set-table');
+    table.append(h('div.st-row.head', {}, [h('span', { text: '#' }), h('span', { text: unit.toUpperCase() }), h('span', { text: 'WDH' }), h('span', { text: 'RIR' }), h('span')]));
+    const fmtW = (v) => v == null ? '' : String(Math.round(v * 100) / 100).replace('.', ',');
+
+    // Zahlenzelle: direkt tippbar; in der aktuellen Zeile zusätzlich −/+
+    const numCell = (set, key, { decimals, isCur }) => {
+      const input = h('input.st-in', { type: 'text', inputmode: decimals ? 'decimal' : 'numeric', value: decimals ? fmtW(set[key]) : (set[key] ?? ''), placeholder: '–', 'aria-label': key === 'weight' ? unit : 'Wiederholungen' });
+      const commit = () => {
+        const v = parseNum(input.value);
+        set[key] = v == null ? null : decimals ? Math.max(0, Math.round(v * 100) / 100) : Math.max(0, Math.round(v));
+        touchWorkout();
+        if (key === 'weight') onWeightChange?.();
+      };
+      input.addEventListener('input', commit);
+      input.addEventListener('blur', () => { commit(); input.value = decimals ? fmtW(set[key]) : (set[key] ?? ''); });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+      input.addEventListener('focus', () => input.select());
+      if (!isCur) return h('div.st-num', {}, [input]);
+      const bump = (d) => { const v = Math.max(0, (Number(set[key]) || 0) + d); input.value = decimals ? fmtW(v) : String(v); commit(); haptic(5); };
+      return h('div.st-num.cur', {}, [
+        h('button.st-pm', { text: '−', 'aria-label': 'weniger', onclick: () => bump(decimals ? -step : -1) }),
+        input,
+        h('button.st-pm', { text: '+', 'aria-label': 'mehr', onclick: () => bump(decimals ? step : 1) }),
+      ]);
+    };
+
+    entry.sets.forEach((set, si) => {
+      const isCur = si === cur && !set.done;
+      const row = h('div.st-row' + (set.done ? '.done' : isCur ? '.cur' : '.open'));
+      // Nummer + Satztyp (Arbeit/Drop/AMRAP/Failure) – tippen öffnet die Auswahl
+      row.append(h('button.st-no' + (set.type ? '.' + set.type : ''), { 'aria-label': 'Satztyp', onclick: () => {
+        actionSheet(`Satz ${si + 1} · Typ`, Object.entries(SET_TYPES).map(([k, t]) => ({ label: `${t.label} – ${t.desc}`, fn: () => {
+          set.type = k === 'work' ? undefined : k;
+          if (k === 'amrap' || k === 'fail') set.rir = 0;
+          touchWorkout(); redrawAll();
+        } })));
+      } }, [h('span', { text: String(si + 1) }), set.type ? h('small', { text: SET_TYPES[set.type].short }) : null]));
+
+      if (set.done) row.append(h('div.st-val', { text: fmtW(set.weight) || '–' }), h('div.st-val', { text: set.reps ?? '–' }));
+      else row.append(numCell(set, 'weight', { decimals: true, isCur }), numCell(set, 'reps', { decimals: false, isCur }));
+
+      // RIR: tippen zählt hoch (– → 0 → 1 → 2 → 3 → 4+ → –)
+      const rirLbl = () => set.rir == null ? '–' : set.rir === 4 ? '4+' : String(set.rir);
+      const rir = h('button.st-rir' + (set.rir != null ? '.on' : ''), { text: rirLbl(), 'aria-label': 'Wiederholungen im Tank', onclick: () => {
+        set.rir = set.rir == null ? 0 : set.rir >= 4 ? null : set.rir + 1;
+        touchWorkout(); rir.textContent = rirLbl(); rir.classList.toggle('on', set.rir != null);
+      } });
+      row.append(rir);
+      // Haken: Satz abschließen bzw. wieder öffnen
+      const check = h('button.st-check' + (set.done ? '.on' : ''), { 'aria-label': set.done ? 'Satz wieder öffnen' : 'Satz abschließen', html: svgIcon.check, onclick: () => {
+        if (set.done) { set.done = false; entry.expanded = si; restTimer.stop(true); touchWorkout(); redrawAll(); drawProgress(); drawNav(); return; }
+        completeSet(entry, set, si, exIdx, redrawAll, row, check);
+      } });
+      row.append(check);
+      // Offene, nicht aktuelle Zeile antippen → wird aktuell (±)
+      if (!set.done && !isCur) row.addEventListener('click', (e) => { if (e.target.closest('button, input')) return; entry.expanded = si; touchWorkout(); redrawAll(); });
+      table.append(row);
+    });
+    return table;
+  };
+
+  /** Satz abschließen: Werte auffüllen, PR prüfen, Pause/Supersatz steuern, Folge-Sätze vorbelegen */
+  const completeSet = (entry, set, si, exIdx, redrawAll, row, check) => {
+    unlockAudio(); primeSpeech();
+    if (set.weight == null) set.weight = entry.targetWeight ?? null;
+    if (set.reps == null) set.reps = parseNum(entry.targetReps) ?? null;
+    set.done = true;
+    set.doneAt = Date.now();
+    entry.expanded = null; // nächster offener Satz wird aktuell
+    haptic(15);
+    // Alle noch offenen Sätze ohne Werte vorbelegen
+    for (const s of entry.sets) if (!s.done) { if (s.weight == null) s.weight = set.weight; if (s.reps == null) s.reps = set.reps; }
+    touchWorkout();
+    // PR-Erkennung gegen Historie + frühere Sätze dieses Workouts
+    const earlier = entry.sets.filter((s, j) => j !== si && s.done);
+    const prs = detectSetPRs(entry.name, set, earlier);
+    if (prs.length) { haptic([30, 40, 30]); showPrToast(entry.name, prs); }
+
+    // Supersatz: A → kein Timer, direkt zu B; B → Timer, danach zurück zu A
+    const nextEx = w.entries[exIdx + 1], prevEx = w.entries[exIdx - 1];
+    const isFirstOfPair = entry.superset && nextEx;
+    const isSecondOfPair = prevEx?.superset;
+    const isLastOverall = exIdx === w.entries.length - 1 && entry.sets.every(s => s.done);
+    let startRest = false;
+    if (isFirstOfPair) {
+      toast(`Supersatz: weiter mit ${nextEx.name}`, { action: { label: 'Weiter', fn: () => go(exIdx + 1) }, duration: 6000 });
+    } else {
+      startRest = getSettings().autoRestTimer && !isLastOverall;
+      if (isSecondOfPair && prevEx.sets.some(s => !s.done)) {
+        toast(`Nächste Runde: ${prevEx.name}`, { action: { label: 'Zurück', fn: () => go(exIdx - 1) }, duration: 6000 });
+      }
+    }
+
+    // Lautloses Keep-Alive-Audio muss synchron in der Tipp-Geste starten (iOS), der Timer darf später kommen
+    if (startRest) keepAlive.start();
+
+    // Haken zeichnen + Zeile einrasten, dann neu zeichnen und den Pausenring ins Bild holen
+    check.innerHTML = svgIcon.checkDraw; check.classList.add('on');
+    row.classList.add('snap', 'done'); row.classList.remove('cur');
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    setTimeout(() => {
+      if (startRest) { restForEntry = entry; restTimer.start(entry.restSec || getSettings().defaultRestSec); }
+      redrawAll(); drawProgress(); drawNav();
+      if (restEls?.card) scrollTo(restEls.card);
+    }, reduce ? 0 : 420);
   };
 
   // ---------- Pausenring (inline über dem nächsten Satz, oder mit Vorschau auf die nächste Übung) ----------
@@ -304,104 +413,6 @@ export function render(root, { navigate }) {
       ]),
     ]);
     restEls = { time, prog, C, card, lbl: card.querySelector('.lbl') };
-    return card;
-  };
-
-  // ---------- Aktueller Satz: Karte mit Steppern ----------
-  const setCard = (entry, set, si, exIdx, redrawAll, onWeightChange) => {
-    const card = h('div.card.set-card.current' + (set.done ? '.done' : ''));
-    const step = entry.weightStep || 2.5;
-    const sum = h('div.set-sum', { text: `${fmtKg(set.weight)} × ${set.reps ?? '–'}` });
-    // Satztyp: Arbeitssatz (Standard), Drop, AMRAP, Failure – tippen öffnet die Auswahl
-    const typeBtn = h('button.set-type' + (set.type ? '.' + set.type : ''), { text: SET_TYPES[set.type || 'work'].short, onclick: () => {
-      actionSheet('Satztyp', Object.entries(SET_TYPES).map(([k, t]) => ({ label: `${t.label} – ${t.desc}`, fn: () => {
-        set.type = k === 'work' ? undefined : k;
-        if (k === 'amrap' || k === 'fail') set.rir = 0;
-        touchWorkout(); redrawAll();
-      } })));
-    } });
-    const head = h('div.set-head', {}, [
-      h('div.row', { style: { gap: '8px' } }, [h('div.set-title', { text: `Satz ${si + 1}` }), sum]),
-      h('div.row', { style: { gap: '8px' } }, [typeBtn, set.done ? h('div.check-badge', { html: svgIcon.check }) : h('span.faint.small', { text: `von ${entry.sets.length}` })]),
-    ]);
-    card.append(head);
-
-    const updateSum = () => { sum.textContent = `${fmtKg(set.weight)} × ${set.reps ?? '–'}` + (set.rir != null ? ` · RIR ${set.rir}` : ''); };
-    const weightStepper = stepper({
-      value: set.weight, step, unit: getSettings().unit, min: 0, decimals: true,
-      onChange: (v) => { set.weight = v; updateSum(); touchWorkout(); onWeightChange?.(); },
-      onTap: (setValue) => openWeightSheet(entry, set.weight, (v) => { setValue(v); }),
-    });
-    const repsStepper = stepper({
-      value: set.reps, step: 1, unit: 'Wdh', min: 0, decimals: false,
-      onChange: (v) => { set.reps = v; updateSum(); touchWorkout(); },
-    });
-    card.append(h('div.steppers', {}, [weightStepper, repsStepper]));
-    updateSum();
-
-    // RIR-Chips (Wiederholungen im Tank)
-    const rirRow = h('div.rir-row', {}, [h('span.lbl', { text: 'RIR' })]);
-    for (const r of [0, 1, 2, 3, 4]) {
-      const chip = h('button.chip' + (set.rir === r ? '.on' : ''), { text: r === 4 ? '4+' : String(r), onclick: () => {
-        set.rir = set.rir === r ? null : r; touchWorkout(); updateSum();
-        for (const c of rirRow.querySelectorAll('.chip')) c.classList.toggle('on', set.rir != null && c.textContent === (set.rir === 4 ? '4+' : String(set.rir)));
-      } });
-      rirRow.append(chip);
-    }
-    card.append(rirRow);
-
-    const btn = h('button.btn.block.set-done-btn' + (set.done ? '.ghost' : '.good'), {
-      html: set.done ? '<span>Erledigt – tippen zum Zurücksetzen</span>' : svgIcon.check + '<span>Satz abschließen</span>',
-      onclick: () => {
-        unlockAudio(); primeSpeech();
-        if (set.done) {
-          set.done = false; entry.expanded = si; restTimer.stop(true); touchWorkout(); redrawAll(); drawProgress(); drawNav(); return;
-        }
-        if (set.weight == null) set.weight = entry.targetWeight ?? null;
-        if (set.reps == null) set.reps = parseNum(entry.targetReps) ?? null;
-        set.done = true;
-        set.doneAt = Date.now();
-        entry.expanded = null; // nächster offener Satz wird aktuell
-        haptic(15);
-        // Alle noch offenen Sätze ohne Werte vorbelegen
-        for (const s of entry.sets) if (!s.done) { if (s.weight == null) s.weight = set.weight; if (s.reps == null) s.reps = set.reps; }
-        touchWorkout();
-        // PR-Erkennung gegen Historie + frühere Sätze dieses Workouts
-        const earlier = entry.sets.filter((s, j) => j !== si && s.done);
-        const prs = detectSetPRs(entry.name, set, earlier);
-        if (prs.length) { haptic([30, 40, 30]); showPrToast(entry.name, prs); }
-
-        // Supersatz: A → kein Timer, direkt zu B; B → Timer, danach zurück zu A
-        const nextEx = w.entries[exIdx + 1], prevEx = w.entries[exIdx - 1];
-        const isFirstOfPair = entry.superset && nextEx;
-        const isSecondOfPair = prevEx?.superset;
-        const isLastOverall = exIdx === w.entries.length - 1 && entry.sets.every(s => s.done);
-        let startRest = false;
-        if (isFirstOfPair) {
-          toast(`Supersatz: weiter mit ${nextEx.name}`, { action: { label: 'Weiter', fn: () => go(exIdx + 1) }, duration: 6000 });
-        } else {
-          startRest = getSettings().autoRestTimer && !isLastOverall;
-          if (isSecondOfPair && prevEx.sets.some(s => !s.done)) {
-            toast(`Nächste Runde: ${prevEx.name}`, { action: { label: 'Zurück', fn: () => go(exIdx - 1) }, duration: 6000 });
-          }
-        }
-
-        // Lautloses Keep-Alive-Audio muss synchron in der Tipp-Geste starten (iOS), der Timer darf später kommen
-        if (startRest) keepAlive.start();
-
-        // Haken zeichnen + Karte einrasten, dann zum kompakten Layout wechseln und den Pausenring ins Bild holen
-        btn.innerHTML = svgIcon.checkDraw + '<span>Erledigt</span>';
-        btn.className = 'btn block set-done-btn ghost';
-        card.classList.add('snap', 'done');
-        const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        setTimeout(() => {
-          if (startRest) { restForEntry = entry; restTimer.start(entry.restSec || getSettings().defaultRestSec); }
-          redrawAll(); drawProgress(); drawNav();
-          scrollTo(restEls?.card || body.querySelector('.set-card.current'));
-        }, reduce ? 0 : 420);
-      },
-    });
-    card.append(btn);
     return card;
   };
 
@@ -570,30 +581,6 @@ export function unmount() {
 
 // ---------- Stepper ----------
 
-function stepper({ value, step, unit, min = 0, decimals, onChange, onTap }) {
-  let v = value == null ? null : Number(value);
-  const fmt = () => v == null ? '–' : decimals ? String(Math.round(v * 100) / 100).replace('.', ',') : String(v);
-  const valEl = h('div.val', {}, [h('span', { text: fmt() }), h('small', { text: unit })]);
-  const set = (nv) => {
-    v = nv == null ? null : Math.max(min, decimals ? Math.round(nv * 100) / 100 : Math.round(nv));
-    valEl.firstChild.textContent = fmt();
-    onChange(v);
-  };
-  const minus = h('button', { text: '−', 'aria-label': 'weniger', onclick: () => set(v == null ? 0 : v - step) });
-  const plus = h('button', { text: '+', 'aria-label': 'mehr', onclick: () => set(v == null ? step : v + step) });
-  // Tippen auf den Wert → Sheet (Gewicht: Scheibenrechner) oder direkt eingeben (Wdh)
-  valEl.addEventListener('click', () => {
-    if (onTap) { onTap(set); return; }
-    const input = h('input', { type: 'text', inputmode: decimals ? 'decimal' : 'numeric', value: v ?? '' });
-    const commit = () => { const n = parseNum(input.value); set(n); input.replaceWith(valEl); };
-    input.addEventListener('blur', commit);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
-    valEl.replaceWith(input);
-    input.focus(); input.select();
-  });
-  return h('div.stepper', {}, [minus, valEl, plus]);
-}
-
 function fmtSets(n) { return (Number.isInteger(n) ? n : n.toFixed(1).replace('.', ',')) + ' S.'; }
 
 /** „60 × 6 · 6 · 5“ – gleiches Gewicht wird zusammengefasst, sonst „60 × 6 · 65 × 5“ */
@@ -613,24 +600,26 @@ function fmtLastSets(sets) {
 
 function setupRow(entry) {
   const box = h('div.wk-setup');
+  let edit = null;
   const draw = () => {
     box.innerHTML = '';
     const setup = getExerciseSettings(entry.name).setup || '';
-    const edit = () => {
+    edit = () => {
       const input = h('input.input', { type: 'text', value: setup, placeholder: 'Sitz 4, Griffhöhe 3, Pin links …', style: { minHeight: '42px', fontSize: '15px' } });
       const commit = () => { updateExerciseSettings(entry.name, { setup: input.value.trim() }); draw(); };
       input.addEventListener('blur', commit);
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
       box.innerHTML = '';
+      box.hidden = false;
       box.append(h('div.row', { style: { gap: '8px' } }, [h('span.wk-setup-ico', { html: svgIcon.wrench }), input]));
       setTimeout(() => input.focus(), 30);
     };
-    box.append(setup
-      ? h('button.wk-setup-line', { onclick: edit }, [h('span.wk-setup-ico', { html: svgIcon.wrench }), h('span.truncate', { text: setup })])
-      : h('button.wk-setup-line.empty', { onclick: edit }, [h('span.wk-setup-ico', { html: svgIcon.wrench }), h('span', { text: 'Maschineneinstellungen merken' })]));
+    // Leer bleibt unsichtbar – erreichbar über „⋯ → Maschineneinstellungen“
+    box.hidden = !setup;
+    if (setup) box.append(h('button.wk-setup-line', { onclick: edit }, [h('span.wk-setup-ico', { html: svgIcon.wrench }), h('span.truncate', { text: setup })]));
   };
   draw();
-  return box;
+  return { box, edit: () => edit() };
 }
 
 // ---------- PR-Animation ----------

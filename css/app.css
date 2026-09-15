@@ -533,7 +533,15 @@ details.raw pre { white-space: pre-wrap; font-size: 12px; color: var(--text-3); 
    ------------------------------------------------------------------ */
 .figure { width: 100%; height: auto; display: block; }
 .figure .limb { fill: none; stroke: var(--text); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
-.figure .limb.back { stroke: var(--text-3); stroke-width: 4.5; }
+.figure .seg-torso { stroke-width: 12; }
+.figure .seg-neck { stroke-width: 5; }
+.figure .seg-shoulders { stroke-width: 9; }
+.figure .seg-hips { stroke-width: 9; }
+.figure .seg-thigh { stroke-width: 8; }
+.figure .seg-shin { stroke-width: 6; }
+.figure .seg-uarm { stroke-width: 7; }
+.figure .seg-farm { stroke-width: 5.5; }
+.figure .limb.back { stroke: var(--text-3); }
 .figure .head { fill: var(--text); }
 .figure .frame { fill: var(--surface-3); }
 .figure .frame-line { fill: none; stroke: var(--surface-3); stroke-width: 3; stroke-linecap: round; }
@@ -661,12 +669,11 @@ details.raw pre { white-space: pre-wrap; font-size: 12px; color: var(--text-3); 
    ------------------------------------------------------------------ */
 .bodymap { width: 100%; height: auto; max-height: 420px; display: block; margin: 0 auto; }
 .bodymap .body-sil { fill: var(--surface-3); stroke: none; }
-.bodymap .body-limb { fill: none; stroke: var(--surface-3); stroke-width: 26; stroke-linecap: round; stroke-linejoin: round; }
-.bodymap .body-leg { fill: none; stroke: var(--surface-3); stroke-width: 40; stroke-linecap: round; stroke-linejoin: round; }
-.bodymap .muscle { fill: color-mix(in srgb, var(--text-3) 35%, var(--surface-3)); stroke: var(--bg); stroke-width: 1.5; cursor: pointer; transition: filter 0.15s ease; }
+.bodymap .muscle { fill: color-mix(in srgb, var(--text-3) 32%, var(--surface-3)); stroke: var(--surface); stroke-width: 1.2; stroke-linejoin: round; cursor: pointer; transition: filter 0.15s ease; }
+.bodymap .muscle.detail { fill: color-mix(in srgb, var(--text-3) 18%, var(--surface-3)); cursor: default; pointer-events: none; }
 .bodymap .muscle.active { filter: drop-shadow(0 0 6px rgba(255, 92, 53, 0.25)); }
 .bodymap .muscle.selected { stroke: var(--text); stroke-width: 2.5; }
-.bodymap .muscle-lines { fill: none; stroke: var(--bg); stroke-width: 1.5; opacity: 0.7; pointer-events: none; }
+.bodymap .muscle-lines { fill: none; stroke: var(--surface); stroke-width: 1.2; opacity: 0.8; pointer-events: none; }
 .bodymap-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; }
 .bodymap-wrap.compact .bodymap { max-height: 260px; }
 
@@ -1121,3 +1128,79 @@ details.options[open] summary::after { transform: rotate(-90deg); }
 .steps li::marker { color: var(--accent); font-weight: 700; }
 .web-recipe { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); color: inherit; text-decoration: none; }
 .web-recipe:active { background: var(--surface-3); }
+
+/* ------------------------------------------------------------------
+   Plan-Ansicht (1.10): Muskelfokus im Kopf, Chips statt Textzeilen, klebender Start-Button
+   ------------------------------------------------------------------ */
+.plan-head { align-items: flex-start; gap: 10px; }
+.plan-maps { display: flex; gap: 2px; flex: none; cursor: pointer; padding: 2px 4px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); }
+.plan-maps .bodymap { width: 30px; height: 62px; }
+.plan-maps .bodymap .muscle { stroke-width: 2.5; }
+details.plan-note { margin: -4px 0 14px; color: var(--text-2); }
+details.plan-note summary { list-style: none; cursor: pointer; display: flex; gap: 6px; align-items: baseline; font-size: 14px; }
+details.plan-note summary .more { color: var(--accent); font-weight: 600; flex: none; }
+details.plan-note summary::-webkit-details-marker { display: none; }
+details.plan-note[open] summary { display: none; }
+details.plan-note p { margin: 0; font-size: 14px; }
+.plan-list { padding-top: 2px; padding-bottom: 2px; }
+.plan-ex { cursor: pointer; }
+.plan-ex .fig-thumb { width: 64px; height: 56px; }
+.cta-bar { position: sticky; bottom: calc(var(--safe-bottom) + 6px); margin-top: 18px; padding-top: 8px; background: linear-gradient(to top, var(--bg) 70%, transparent); z-index: 5; }
+.cta-bar .btn { min-height: 56px; font-size: 17px; box-shadow: 0 10px 30px rgba(255, 92, 53, 0.25); }
+
+/* ------------------------------------------------------------------
+   Training (1.10): Übungsleiste + Satztabelle
+   ------------------------------------------------------------------ */
+.wk-progress { display: flex; gap: 6px; margin: 8px -16px 0; padding: 0 16px 2px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.wk-progress::-webkit-scrollbar { display: none; }
+.wk-progress i { display: none; }
+.wk-strip-item {
+  position: relative; flex: none; width: 52px; height: 44px; border-radius: 12px; padding: 0;
+  background: var(--surface-2); border: 2px solid transparent; color: var(--text); cursor: pointer; opacity: 0.55;
+  display: flex; align-items: center; justify-content: center; transition: opacity 0.2s ease, border-color 0.2s ease;
+}
+.wk-strip-item .fig-thumb { width: 100%; height: 100%; background: transparent; border: 0; padding: 4px; }
+.wk-strip-item .idx { font-family: var(--display); font-weight: 700; font-size: 14px; color: var(--text-2); }
+.wk-strip-item.cur { opacity: 1; border-color: var(--accent); background: var(--accent-soft); }
+.wk-strip-item.done { opacity: 0.9; }
+.wk-strip-item .badge {
+  position: absolute; right: -4px; top: -4px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 8px;
+  background: var(--good); color: #062b16; font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+}
+.wk-strip-item .badge svg { width: 10px; height: 10px; fill: currentColor; }
+.wk-strip-item .badge.part { background: var(--surface-3); color: var(--text-2); }
+.wk-more.has-note { color: var(--accent); }
+
+.set-table { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.st-row { display: grid; grid-template-columns: 40px 1fr 1fr 44px 44px; align-items: center; gap: 4px; min-height: 52px; padding: 4px 8px 4px 6px; border-top: 1px solid var(--border); }
+.st-row.head { min-height: 30px; padding: 6px 8px 4px 6px; border-top: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: var(--text-3); text-align: center; }
+.st-row.head span:first-child { text-align: left; padding-left: 6px; }
+.st-row.cur { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); box-shadow: inset 3px 0 0 var(--accent); }
+.st-row.done { opacity: 0.82; }
+.st-row.open { cursor: pointer; }
+.st-no { background: transparent; border: 0; color: var(--text-3); font-family: var(--display); font-weight: 700; font-size: 14px; padding: 4px 0 4px 6px; text-align: left; cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; line-height: 1.05; }
+.st-no small { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+.st-no.drop { color: var(--accent); } .st-no.amrap { color: var(--good); } .st-no.fail { color: var(--danger); }
+.st-row.cur .st-no { color: var(--accent); }
+.st-row.done .st-no { color: var(--good); }
+.st-val { text-align: center; font-family: var(--display); font-weight: 700; font-size: 17px; letter-spacing: -0.01em; color: var(--good); }
+.st-num { display: flex; align-items: center; justify-content: center; }
+.st-in {
+  width: 100%; min-width: 0; height: 40px; border: 0; border-radius: 10px; background: var(--surface-2); color: var(--text);
+  font-family: var(--display); font-weight: 700; font-size: 17px; text-align: center; outline: none; padding: 0 4px;
+}
+.st-in:focus { box-shadow: 0 0 0 2px var(--accent); }
+.st-in::placeholder { color: var(--text-3); font-weight: 600; }
+.st-num.cur { gap: 2px; }
+.st-num.cur .st-in { background: var(--surface); }
+.st-pm { flex: none; width: 28px; height: 40px; border: 0; border-radius: 10px; background: var(--surface-2); color: var(--text-2); font-size: 18px; font-weight: 700; cursor: pointer; }
+.st-pm:active { background: var(--surface-3); }
+.st-rir { height: 32px; min-width: 36px; margin: 0 auto; border-radius: 9px; border: 1px solid var(--border); background: transparent; color: var(--text-3); font-weight: 700; font-size: 13px; cursor: pointer; }
+.st-rir.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.st-check { width: 38px; height: 38px; margin: 0 auto; border-radius: 50%; border: 2px solid var(--border); background: transparent; color: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s ease, border-color 0.15s ease; }
+.st-check svg { width: 20px; height: 20px; fill: currentColor; }
+.st-row.cur .st-check { border-color: var(--good); background: var(--good-soft); color: var(--good); }
+.st-check.on { background: var(--good); border-color: var(--good); color: #062b16; }
+.st-row.snap { animation: snap 300ms var(--ease); }
+.set-table + .add-set { margin-top: 8px; }
+@media (max-width: 360px) { .st-row { grid-template-columns: 34px 1fr 1fr 38px 40px; } .st-pm { width: 24px; } }

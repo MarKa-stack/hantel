@@ -648,7 +648,7 @@ function renderMuscles(root, { navigate }) {
     for (const b of sideSeg.children) b.classList.toggle('active', (b.textContent === 'Vorderseite') === (mSide === 'front'));
 
     mapWrap.innerHTML = bodyMapSvg(mSide, ms.totals, { mode: 'week', selected: mSelected, still: !firstDraw });
-    mapWrap.querySelectorAll('.muscle').forEach(el => el.addEventListener('click', () => { mSelected = mSelected === el.dataset.muscle ? null : el.dataset.muscle; draw(); }));
+    mapWrap.querySelectorAll('.muscle[data-muscle]').forEach(el => el.addEventListener('click', () => { mSelected = mSelected === el.dataset.muscle ? null : el.dataset.muscle; draw(); }));
 
     // Detailkarte
     detail.innerHTML = '';

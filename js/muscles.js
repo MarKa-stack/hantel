@@ -124,53 +124,49 @@ export function ratioFor(sets, mode = 'week') {
 
 const W = 200, H = 420;
 
-// Rechte Körperhälfte (x > 100) – linke wird gespiegelt. Vorderseite.
+// Rechte Körperhälfte (x > 100) – linke wird gespiegelt. Reihenfolge = Zeichenreihenfolge.
+// Regionen ohne Muskelgruppe (Unterarm, Serratus, Adduktoren) sind nur Detail und bleiben neutral.
 const FRONT = {
-  chest: 'M100 90 C118 86 138 88 146 96 C150 110 142 128 122 136 C112 139 103 139 100 136 Z',
-  front_delt: 'M144 84 C154 80 164 86 166 98 C162 104 154 106 148 100 C148 94 146 88 144 84 Z',
-  side_delt: 'M158 84 C168 86 176 98 174 112 C170 118 162 118 158 112 C161 104 160 94 158 84 Z',
-  biceps: 'M152 118 C164 120 172 132 170 160 C166 170 158 172 152 166 C149 150 149 132 152 118 Z',
-  abs: 'M100 142 C110 140 118 146 119 154 L119 214 C116 224 108 230 100 230 Z',
-  obliques: 'M121 150 C130 150 138 154 139 164 L136 212 C130 218 124 218 121 214 Z',
-  quads: 'M104 234 C122 228 138 236 140 256 C142 294 138 318 130 330 C120 336 108 334 104 326 C99 296 99 258 104 234 Z',
-  calves: 'M109 344 C122 340 132 346 132 362 C132 386 128 402 121 408 C112 408 108 398 108 384 C108 368 108 356 109 344 Z',
+  traps_f: 'M104 60 C116 62 134 66 152 76 C142 80 124 80 110 74 C107 70 105 65 104 60 Z',
+  side_delt: 'M164 82 C173 86 179 98 178 114 C175 120 168 122 163 116 C166 104 166 92 164 82 Z',
+  front_delt: 'M148 78 C158 74 168 80 171 94 C170 104 162 110 154 106 C150 98 148 88 148 78 Z',
+  chest: 'M100 86 C112 82 134 84 149 92 C154 108 148 128 130 138 C116 143 104 142 100 140 Z',
+  biceps: 'M153 110 C165 112 175 128 176 152 C175 166 168 174 158 170 C152 152 150 130 153 110 Z',
+  forearm_f: 'M160 176 C170 172 182 178 184 194 C188 214 188 232 184 246 C180 250 174 250 171 244 C167 224 162 200 160 176 Z',
+  serratus: 'M136 140 C142 144 148 152 146 162 C142 158 138 154 136 148 Z',
+  abs: 'M100 146 C110 144 118 150 118 160 L118 218 C114 228 106 234 100 234 Z',
+  obliques: 'M120 156 C130 158 138 164 138 176 L134 216 C128 222 122 222 120 218 Z',
+  adductors: 'M103 262 C108 258 114 262 114 272 C112 290 108 300 104 306 C102 292 101 276 103 262 Z',
+  quads: 'M104 240 C124 234 142 242 145 264 C147 298 143 324 133 336 C121 342 108 340 104 332 C99 300 99 264 104 240 Z',
+  calves: 'M109 348 C120 344 134 350 136 366 C138 388 132 402 124 408 C114 408 109 400 108 386 C107 372 107 358 109 348 Z',
 };
-// Rückseite
 const BACK = {
-  traps: 'M100 74 C114 72 128 80 140 92 C130 102 116 106 100 106 Z',
-  lats: 'M102 110 C120 108 138 108 144 118 C146 142 138 168 122 184 C114 190 105 190 100 186 L100 112 Z',
-  lower_back: 'M100 188 C108 188 116 192 118 202 L116 226 C110 230 104 232 100 232 Z',
-  rear_delt: 'M142 84 C154 82 166 92 168 108 C162 114 154 114 148 108 C146 100 144 92 142 84 Z',
-  side_delt_b: 'M160 88 C170 92 176 104 174 116 C170 120 164 120 160 116 C162 106 161 96 160 88 Z',
-  triceps: 'M152 118 C164 120 172 132 170 160 C166 170 158 172 152 166 C149 150 149 132 152 118 Z',
-  glutes: 'M100 230 C118 226 136 232 140 250 C140 268 132 282 116 284 C106 284 100 280 100 274 Z',
-  hamstrings: 'M104 288 C122 282 138 288 140 306 C142 322 138 336 130 342 C120 344 108 342 104 334 C99 316 99 300 104 288 Z',
-  calves: 'M109 350 C122 346 134 352 134 368 C134 390 128 404 120 410 C111 408 107 398 107 382 C107 368 108 358 109 350 Z',
+  traps: 'M100 60 C112 62 130 70 150 80 C140 92 128 104 114 112 C108 116 104 118 100 118 Z',
+  side_delt_b: 'M166 84 C175 90 181 102 179 116 C176 122 169 124 164 118 C167 106 167 94 166 84 Z',
+  rear_delt: 'M148 78 C158 76 170 86 173 104 C170 112 162 116 154 110 C150 100 148 88 148 78 Z',
+  teres: 'M120 100 C132 100 146 106 148 118 C144 126 132 130 122 124 C118 116 118 106 120 100 Z',
+  lats: 'M100 122 C118 120 138 120 147 130 C146 152 138 176 122 192 C112 196 104 196 100 192 Z',
+  lower_back: 'M100 196 C106 196 112 200 114 212 L112 236 C108 240 104 242 100 242 Z',
+  triceps: 'M153 110 C165 112 175 128 176 152 C175 166 168 174 158 170 C152 152 150 130 153 110 Z',
+  forearm_b: 'M160 176 C170 172 182 178 184 194 C188 214 188 232 184 246 C180 250 174 250 171 244 C167 224 162 200 160 176 Z',
+  glutes: 'M100 240 C120 236 140 242 144 260 C144 280 134 294 118 296 C107 296 100 292 100 286 Z',
+  hamstrings: 'M104 300 C122 294 140 300 143 318 C145 334 141 348 131 354 C121 356 108 354 104 346 C99 328 99 312 104 300 Z',
+  calves: 'M108 358 C122 354 136 360 136 376 C136 396 130 408 122 412 C112 410 108 400 107 386 C106 372 106 364 108 358 Z',
+};
+// Trennlinien für Details (Bauchsegmente, Schlüsselbein, Quadrizeps-Köpfe, Schienbein, Wirbelsäule …)
+const LINES = {
+  front: 'M108 74 C124 76 140 76 150 80 M100 164 L118 164 M100 182 L118 182 M100 200 L118 200 M100 218 L118 218 M126 246 C132 272 132 304 128 334 M113 300 C112 318 116 330 121 338 M116 352 C118 372 120 392 122 406',
+  back: 'M100 122 L100 242 M124 304 C126 322 126 340 122 354 M122 360 C123 376 123 392 121 408 M166 178 C172 200 176 222 178 244',
 };
 const REGION_MUSCLE = {
-  chest: 'chest', front_delt: 'front_delt', side_delt: 'side_delt', biceps: 'biceps', abs: 'abs', obliques: 'abs', quads: 'quads', calves: 'calves',
-  traps: 'back', lats: 'back', lower_back: 'back', rear_delt: 'rear_delt', side_delt_b: 'side_delt', triceps: 'triceps', glutes: 'glutes', hamstrings: 'hamstrings',
+  chest: 'chest', front_delt: 'front_delt', side_delt: 'side_delt', biceps: 'biceps', abs: 'abs', obliques: 'abs', quads: 'quads', calves: 'calves', traps_f: 'back',
+  traps: 'back', teres: 'back', lats: 'back', lower_back: 'back', rear_delt: 'rear_delt', side_delt_b: 'side_delt', triceps: 'triceps', glutes: 'glutes', hamstrings: 'hamstrings',
+  forearm_f: null, forearm_b: null, serratus: null, adductors: null,
 };
 
-function silhouette() {
-  // Kopf, Hals, Rumpf, Arme, Beine als weiche Formen
-  return [
-    `<circle class="body-sil" cx="100" cy="36" r="24"/>`,
-    `<rect class="body-sil" x="90" y="56" width="20" height="24" rx="6"/>`,
-    `<path class="body-sil" d="M64 76 L136 76 C148 76 156 84 155 98 L148 232 C148 240 142 244 134 244 L66 244 C58 244 52 240 52 232 L45 98 C44 84 52 76 64 76 Z"/>`,
-    `<circle class="body-sil" cx="152" cy="94" r="17"/>`,
-    `<circle class="body-sil" cx="48" cy="94" r="17"/>`,
-    `<path class="body-sil body-limb" d="M150 98 L165 164 L170 238"/>`,
-    `<path class="body-sil body-limb" d="M50 98 L35 164 L30 238"/>`,
-    `<ellipse class="body-sil" cx="171" cy="250" rx="9" ry="14"/>`,
-    `<ellipse class="body-sil" cx="29" cy="250" rx="9" ry="14"/>`,
-    `<path class="body-sil body-leg" d="M120 236 L124 322 L121 406"/>`,
-    `<path class="body-sil body-leg" d="M80 236 L76 322 L79 406"/>`,
-    `<ellipse class="body-sil" cx="122" cy="412" rx="14" ry="7"/>`,
-    `<ellipse class="body-sil" cx="78" cy="412" rx="14" ry="7"/>`,
-  ].join('');
-}
-
+// Silhouette: Kopf, Hals, dann je Seite Arm (hinten) und Rumpf+Bein (davor); rechte Hälfte wird gespiegelt
+const SIL_ARM = 'M150 78 C162 76 176 82 179 98 C183 128 181 156 181 174 C187 202 191 226 189 246 C194 258 195 270 190 282 C186 286 180 286 178 282 C175 270 175 258 176 248 C171 226 165 202 161 178 C155 152 150 128 147 106 C147 96 148 86 150 78 Z';
+const SIL_BODY = 'M100 62 C106 62 112 63 117 66 C132 68 148 72 158 80 C156 96 151 110 147 120 C144 148 141 176 138 200 C139 218 145 230 148 244 C151 282 147 320 141 342 C142 372 140 396 137 408 C142 412 144 418 140 421 L108 421 C106 416 108 410 109 406 C108 380 108 376 110 350 C108 322 106 290 103 262 C102 254 101 250 100 248 Z';
 /**
  * SVG-Körperkarte.
  * @param {'front'|'back'} side
@@ -179,10 +175,13 @@ function silhouette() {
  */
 export function bodyMapSvg(side, sets, opts = {}) {
   const regions = side === 'front' ? FRONT : BACK;
-  const parts = [silhouette()];
+  // Eine Körperhälfte aufbauen, die andere ist eine gespiegelte Gruppe (die Aufleucht-Animation setzt
+  // „transform“ am Pfad – deshalb spiegelt die Gruppe, nicht der Pfad)
+  const half = [`<path class="body-sil" d="${SIL_ARM}"/>`, `<path class="body-sil" d="${SIL_BODY}"/>`];
   let idx = 0;
   for (const [region, d] of Object.entries(regions)) {
     const muscle = REGION_MUSCLE[region];
+    if (!muscle) { half.push(`<path class="muscle detail" d="${d}"/>`); continue; } // reines Detail, nie eingefärbt
     const n = sets?.[muscle] || 0;
     // opts.ratios: fertige Intensitäten 0..1 (z.B. Ermüdung) statt Satzzahlen
     const ratio = opts.ratios ? (opts.ratios[muscle] || 0) : ratioFor(n, opts.mode);
@@ -191,14 +190,14 @@ export function bodyMapSvg(side, sets, opts = {}) {
     const sel = opts.selected === muscle ? ' selected' : '';
     // --i steuert die gestaffelte Einblend-Animation („Aufleuchten“)
     const style = color ? ` style="fill:${color};${opts.mono ? `fill-opacity:${(0.45 + 0.55 * Math.min(1, ratio)).toFixed(2)};` : ''}--i:${idx++}"` : '';
-    parts.push(`<path class="muscle${color ? ' active' : ''}${sel}" data-muscle="${muscle}" d="${d}"${style}/>`);
-    parts.push(`<path class="muscle${color ? ' active' : ''}${sel}" data-muscle="${muscle}" d="${d}"${style} transform="translate(200 0) scale(-1 1)"/>`);
+    half.push(`<path class="muscle${color ? ' active' : ''}${sel}" data-muscle="${muscle}" d="${d}"${style}/>`);
   }
-  if (side === 'front') {
-    parts.push(`<path class="muscle-lines" d="M84 158 L116 158 M84 176 L116 176 M84 194 L116 194 M100 142 L100 226"/>`);
-  } else {
-    parts.push(`<path class="muscle-lines" d="M100 108 L100 232"/>`);
-  }
+  half.push(`<path class="muscle-lines" d="${LINES[side]}"/>`);
+  const h = half.join('');
+  const parts = [
+    `<ellipse class="body-sil" cx="100" cy="30" rx="19" ry="23"/><path class="body-sil" d="M90 44 L110 44 L113 68 L87 68 Z"/>`,
+    `<g>${h}</g><g transform="translate(200 0) scale(-1 1)">${h}</g>`,
+  ];
   return `<svg class="bodymap${opts.still ? " still" : ""}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Körperkarte ${side === "front" ? "Vorderseite" : "Rückseite"}">${parts.join("")}</svg>`;
 }
 
