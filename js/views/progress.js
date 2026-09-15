@@ -1,7 +1,9 @@
 // Fortschritt: Übersicht, Übungsanalyse (Kennzahlen/Zeiträume/Rekorde), Session-Detail, Muskelgruppen-Dashboard
 import { h, svg, svgIcon, fmtDuration, fmtDurationLong, fmtDate, fmtShortDate, fmtWeight, fmtNum, dateParts, weekKey, confirmSheet, toast, promptSheet, openSheet, parseNum, illustration, iconBox, isoWeek } from '../util.js';
-import { getSessions, getSession, deleteSession, updateSession, exerciseIndex, exerciseHistory, entryBest, sessionVolume, getSettings, getBodyLog } from '../store.js';
-import { prBaseline, sessionPRs, fmtKg, PR_LABELS, percentTable, inferWeightStep, plateauFor, deloadFor } from '../progression.js';
+import { getSessions, getSession, deleteSession, updateSession, exerciseIndex, exerciseHistory, entryBest, sessionVolume, getSettings, getBodyLog, updateSettings, deloadActive } from '../store.js';
+import { prBaseline, sessionPRs, fmtKg, PR_LABELS, percentTable, inferWeightStep, plateauFor, deloadFor, plateauedExercises } from '../progression.js';
+import { recoveryStatus, fatigueRatios } from '../recovery.js';
+import { targets, dayTotals, dateKey, fmtKcal } from '../nutrition.js';
 import { MUSCLES, MUSCLE_NAME, muscleSets, sessionsInWeek, muscleWeekStats, bodyMapSvg, intensityColor, ratioFor, volumeTarget, volumeStatus } from '../muscles.js';
 import { shareSession } from '../share.js';
 import { milestonesReachedAt, allMilestones } from '../milestones.js';
@@ -150,13 +152,93 @@ function renderOverview(root, { navigate }) {
     stat(`${streak}<small>Wo.</small>`, 'Serie'),
   ]));
 
+  // Erholungsstatus der Muskeln (von der Startseite hierher gezogen)
+  {
+    const status = recoveryStatus();
+    const ratios = fatigueRatios(status);
+    const tired = MUSCLES.filter(([k]) => status[k].state === 'tired').map(([, n]) => n);
+    const fresh = MUSCLES.filter(([k]) => status[k].state === 'fresh' && status[k].lastAt).map(([, n]) => n);
+    root.append(h('div.card.tappable.recovery.row-card.mt', { onclick: () => navigate('/muscles') }, [
+      h('div.row', {}, [
+        h('div.recovery-maps', { html: bodyMapSvg('front', null, { ratios, mono: true, still: true }) + bodyMapSvg('back', null, { ratios, mono: true, still: true }) }),
+        h('div.grow', {}, [
+          h('b', { text: 'Erholung' }),
+          h('div.small.muted', { text: tired.length ? `Noch müde: ${tired.join(', ')}` : 'Alle Muskelgruppen erholt.' }),
+          fresh.length && tired.length ? h('div.small.faint', { text: `Erholt: ${fresh.slice(0, 4).join(', ')}${fresh.length > 4 ? ' …' : ''}` }) : null,
+        ]),
+        h('div', { html: svgIcon.chevron }),
+      ]),
+    ]));
+  }
+
+  // Mehrere Übungen stagnieren → Deload-Woche anbieten
+  if (!deloadActive()) {
+    const stuck = plateauedExercises();
+    if (stuck.length >= 3) {
+      root.append(h('div.card.alert-card.row-card', {}, [
+        h('div.title-ico', { html: svgIcon.warning + `<b>${stuck.length} Übungen stagnieren</b>` }),
+        h('div.small.muted', { style: { marginTop: '4px' }, text: stuck.slice(0, 3).map(p => p.name).join(', ') + (stuck.length > 3 ? ' …' : '') + ' – seit mehreren Wochen kein neues Bestes.' }),
+        h('div.row', { style: { gap: '8px', marginTop: '10px' } }, [
+          h('button.btn.sm.primary', { text: 'Deload-Woche starten', onclick: () => {
+            updateSettings({ deloadUntil: weekKey(Date.now()) + 7 * 86400000 - 1 });
+            toast('Deload-Woche bis Sonntag: −15 % Gewicht, ein Satz weniger');
+          } }),
+          h('button.btn.sm.ghost', { text: 'Details', onclick: () => navigate('/exercise/' + encodeURIComponent(stuck[0].name)) }),
+        ]),
+      ]));
+    }
+  }
+
+  // Wochenrückblick: Montag bis Mittwoch (oder bis zum ersten Training der neuen Woche)
+  {
+    const lastWk = thisWeek - 7 * 86400000;
+    const dow = (new Date().getDay() + 6) % 7; // Mo = 0
+    const last = weekStats(sessions, lastWk);
+    if (last.list.length && (dow <= 2 || weekSessions.length === 0)) {
+      const prev = weekStats(sessions, lastWk - 7 * 86400000);
+      const dVol = last.volume - prev.volume;
+      root.append(h('div.card.tappable.review.row-card', { onclick: () => navigate('/week/' + lastWk) }, [
+        h('div.row', {}, [
+          iconBox('calendar', 'good'),
+          h('div.grow', {}, [
+            h('b', { text: `Deine Woche · KW ${isoWeek(lastWk)}` }),
+            h('div.small.muted', { text: `${last.list.length} Training${last.list.length === 1 ? '' : 's'} · ${fmtNum(last.volume)} ${settings.unit}` + (prev.list.length ? ` (${dVol >= 0 ? '+' : ''}${fmtNum(dVol)})` : '') + ` · ${last.prs.length} PR${last.prs.length === 1 ? '' : 's'}` }),
+          ]),
+          h('div', { html: svgIcon.chevron }),
+        ]),
+      ]));
+    }
+  }
+
+  // Essen heute: Kalorien + Protein gegen das Ziel
+  {
+    const t = targets();
+    const tot = dayTotals(dateKey());
+    if (t.ready || tot.kcal > 0) {
+      const pctK = t.ready ? Math.min(100, Math.round((tot.kcal / t.kcal) * 100)) : 0;
+      const pctP = t.ready ? Math.min(100, Math.round((tot.protein / t.protein) * 100)) : 0;
+      root.append(h('div.card.tappable.food-tile.row-card', { onclick: () => navigate('/food') }, [
+        h('div.row', {}, [
+          iconBox('food'),
+          h('div.grow', {}, [
+            h('b', { text: 'Essen heute' }),
+            h('div.small.muted', { text: t.ready ? `${fmtKcal(tot.kcal)} / ${fmtKcal(t.kcal)} kcal · Protein ${Math.round(tot.protein)} / ${t.protein} g` : `${fmtKcal(tot.kcal)} kcal · ${Math.round(tot.protein)} g Protein` }),
+            t.ready ? h('div.mini-bars', {}, [h('span.track', {}, [h('i.k', { style: { width: pctK + '%' } })]), h('span.track', {}, [h('i.p', { style: { width: pctP + '%' } })])]) : null,
+          ]),
+          h('div', { html: svgIcon.chevron }),
+        ]),
+      ]));
+    }
+  }
+
   // Muskelgruppen-Karte
   const ms = muscleSets(weekSessions);
   const top = Object.entries(ms.totals).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  root.append(h('div.card.tappable.mt', { onclick: () => navigate('/muscles') }, [
-    h('div.row.between', {}, [
+  root.append(h('div.card.tappable.row-card', { onclick: () => navigate('/muscles') }, [
+    h('div.row', {}, [
+      iconBox('body'),
       h('div.grow', {}, [
-        h('div.title-ico', { html: svgIcon.body + '<b>Muskelgruppen</b>' }),
+        h('b', { text: 'Muskelgruppen' }),
         h('div.small.faint', { text: top.length ? 'Diese Woche: ' + top.map(([k, n]) => `${MUSCLE_NAME[k]} ${fmtSetsShort(n)}/${volumeTarget().max}`).join(' · ') : 'Wochenbilanz und Körperkarte' }),
       ]),
       h('div', { html: svgIcon.chevron }),
@@ -166,10 +248,11 @@ function renderOverview(root, { navigate }) {
   // Körpergewicht
   const body = getBodyLog();
   const lastBody = [...body].reverse().find(e => e.weight != null);
-  root.append(h('div.card.tappable', { onclick: () => navigate('/body'), style: { marginTop: '10px' } }, [
-    h('div.row.between', {}, [
+  root.append(h('div.card.tappable.row-card', { onclick: () => navigate('/body') }, [
+    h('div.row', {}, [
+      iconBox('scale', 'neutral'),
       h('div.grow', {}, [
-        h('div.title-ico', { html: svgIcon.scale + '<b>Gewicht & Maße</b>' }),
+        h('b', { text: 'Gewicht & Maße' }),
         h('div.small.faint', { text: lastBody ? `Zuletzt ${String(lastBody.weight).replace('.', ',')} kg · ${fmtShortDate(lastBody.date)}` : 'Körpergewicht und Umfänge protokollieren' }),
       ]),
       h('div', { html: svgIcon.chevron }),
@@ -180,10 +263,11 @@ function renderOverview(root, { navigate }) {
   const mstones = allMilestones();
   const reached = mstones.filter(m => m.at);
   const latest = reached.sort((a, b) => b.at - a.at)[0];
-  root.append(h('div.card.tappable', { onclick: () => navigate('/milestones'), style: { marginTop: '10px' } }, [
-    h('div.row.between', {}, [
+  root.append(h('div.card.tappable.row-card', { onclick: () => navigate('/milestones') }, [
+    h('div.row', {}, [
+      iconBox('trophy', 'good'),
       h('div.grow', {}, [
-        h('div.title-ico', { html: svgIcon.trophy + `<b>Meilensteine</b>` }),
+        h('b', { text: 'Meilensteine' }),
         h('div.small.faint', { text: `${reached.length} von ${mstones.length}` + (latest ? ` · zuletzt „${latest.title}“` : '') }),
       ]),
       h('div', { html: svgIcon.chevron }),

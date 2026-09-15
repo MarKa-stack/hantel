@@ -1275,3 +1275,37 @@ h1 { font-size: 32px; letter-spacing: -0.035em; }
 .subhead .btn.sm.ghost { border-color: transparent; background: var(--surface); color: var(--text-2); }
 .plan-card .meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .plan-head .btn.icon.ghost { border-color: transparent; background: var(--surface); }
+
+/* ---------- Startseite (1.12): Wochenleiste + Pläne, sonst nichts ---------- */
+.week-strip { margin: 6px 0 4px; }
+.ws-head { padding: 0 2px 8px; }
+.ws-month { font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: -0.02em; }
+.ws-kw { font-size: 12px; font-weight: 700; color: var(--text-3); letter-spacing: 0.06em; text-transform: uppercase; }
+.week-strip .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; background: var(--surface); border-radius: 16px; padding: 8px 6px; }
+.week-strip .day {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0 4px; border: 0; border-radius: 12px;
+  background: transparent; color: var(--text-2); cursor: default; font-family: var(--font);
+}
+.week-strip .day .wd { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+.week-strip .day .num { font-family: var(--display); font-weight: 700; font-size: 16px; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.week-strip .day .dot { width: 5px; height: 5px; border-radius: 50%; background: transparent; }
+.week-strip .day.future { opacity: 0.5; }
+.week-strip .day.today .num { background: var(--accent); color: var(--accent-text); }
+.week-strip .day.today .wd { color: var(--accent); }
+.week-strip .day.trained { cursor: pointer; color: var(--text); }
+.week-strip .day.trained .dot { background: var(--good); }
+.week-strip .day.trained:not(.today) .num { background: var(--good-soft); color: var(--good); }
+.week-strip .day:disabled { opacity: 1; }
+.week-strip .day.future:disabled { opacity: 0.5; }
+
+.live-card { margin-top: 14px; padding: 12px 14px; }
+.live-card .row { gap: 10px; align-items: center; }
+.live-card .hero-bar { margin-top: 10px; }
+.live-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; box-shadow: 0 0 0 4px var(--accent-soft); animation: live-pulse 1.6s ease-in-out infinite; }
+@keyframes live-pulse { 0%, 100% { box-shadow: 0 0 0 3px var(--accent-soft); } 50% { box-shadow: 0 0 0 7px transparent; } }
+.plan-flag { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-bottom: 2px; }
+.plan-card.next { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
+.plan-card .plan-play { background: var(--surface-2); color: var(--text); }
+.plan-card .plan-play.primary { background: var(--accent); color: var(--accent-text); }
+.plan-reason { margin: 10px 4px 0; }
+.subhead .btn.sm.ghost.icon { width: 36px; min-height: 36px; }
