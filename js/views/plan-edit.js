@@ -1,5 +1,5 @@
-// Plan bearbeiten: Name, Notiz, Übungen (hinzufügen, ändern, sortieren, löschen)
-import { h, svgIcon, fmtWeight, openSheet, confirmSheet, toast, parseNum } from '../util.js';
+// Plan bearbeiten: Name, Notiz, Kartenbild, Übungen (hinzufügen, ändern, sortieren, löschen)
+import { h, svgIcon, fmtWeight, openSheet, confirmSheet, toast, parseNum, shrinkImage } from '../util.js';
 import { getPlan, updatePlan, newExercise, getSettings, exerciseIndex, getPlans } from '../store.js';
 import { inferWeightStep } from '../progression.js';
 
@@ -17,10 +17,34 @@ export function render(root, { params, navigate }) {
   nameInput.addEventListener('input', () => { plan.name = nameInput.value.trim() || 'Plan'; commit(); });
   const noteInput = h('input.input', { type: 'text', value: plan.note || '', placeholder: 'Notiz (optional)' });
   noteInput.addEventListener('input', () => { plan.note = noteInput.value.trim(); commit(); });
+  // Hintergrundbild der Plan-Karte: eigenes Foto (verkleinert, bleibt im Gerät) oder Standard-Illustration
+  const imgRow = h('div.field');
+  const drawImage = () => {
+    imgRow.innerHTML = '';
+    const file = h('input', { type: 'file', accept: 'image/*', hidden: true });
+    file.addEventListener('change', async () => {
+      const f = file.files?.[0]; if (!f) return;
+      try { plan.image = await shrinkImage(f, { maxSide: 1000, maxBytes: 280_000 }); updatePlan(plan.id, { image: plan.image }); toast('Bild gesetzt'); drawImage(); }
+      catch (e) { toast('Fehler: ' + e.message); }
+    });
+    imgRow.append(
+      h('label', { text: 'Bild der Karte' }),
+      h('div.plan-image-row', {}, [
+        h('div.preview', { style: plan.image ? { backgroundImage: `url("${plan.image}")` } : null }),
+        h('div.grow.small.muted', { text: plan.image ? 'Eigenes Foto' : 'Standard: Körperkarte in Planfarbe' }),
+        h('button.btn.sm.ghost', { text: plan.image ? 'Ändern' : 'Foto wählen', onclick: () => file.click() }),
+        plan.image ? h('button.btn.sm.ghost', { text: 'Entfernen', onclick: () => { plan.image = null; updatePlan(plan.id, { image: null }); drawImage(); } }) : null,
+        file,
+      ]),
+    );
+  };
+  drawImage();
+
 
   root.append(h('div.stack', {}, [
     h('div.field', {}, [h('label', { text: 'Name' }), nameInput]),
     h('div.field', {}, [h('label', { text: 'Notiz' }), noteInput]),
+    imgRow,
   ]));
 
   root.append(h('div.subhead', {}, [h('h2', { text: 'Übungen' })]));

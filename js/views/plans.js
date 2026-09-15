@@ -1,5 +1,5 @@
 // Startbildschirm, bewusst leer: Wochenleiste (heute markiert, Trainingstage mit Punkt), laufendes Workout,
-// die Pläne mit Direktstart – der empfohlene Plan trägt „Heute dran“. Alles Weitere liegt unter „Fortschritt“.
+// „Als Nächstes“-Karte und die Pläne – jeweils mit Bild (eigenes Foto oder Körperkarte in Planfarbe). Rest unter „Fortschritt“.
 import { h, svgIcon, toast, actionSheet, confirmSheet, promptSheet, relativeDay, illustration, weekKey, isoWeek } from '../util.js';
 import { getPlans, addPlan, newPlan, deletePlan, duplicatePlan, movePlan, getSessions, getActiveWorkout, subscribe, getSettings } from '../store.js';
 import { muscleSets, bodyMapSvg } from '../muscles.js';
@@ -36,6 +36,28 @@ export function render(root, { navigate }) {
       ]));
     }
 
+    // Als Nächstes: der empfohlene Plan (Erholungsstatus + Reihenfolge) als große Karte mit Bild
+    if (!active && plans.length) {
+      const sug = suggestPlan();
+      const p = sug.plan;
+      const last = [...sessions].reverse().find(s => s.planId === p.id);
+      const deload = settings.deloadUntil && settings.deloadUntil > Date.now();
+      root.append(h('div.card.tappable.plan-card.art.hero-card' + (p.image ? '.has-photo' : ''), { style: `--pc:${colorFor(p)}`, onclick: () => navigate('/plan/' + p.id) }, [
+        planArt(p),
+        h('div.plan-body', {}, [
+          h('div.plan-flag', { text: deload ? 'Als Nächstes · Deload' : 'Als Nächstes' }),
+          h('h2', { text: p.name }),
+          h('div.meta-pills', {}, [
+            h('span.mp', { text: `${p.exercises.length} Übungen` }),
+            h('span.mp', { text: `${p.exercises.reduce((a, e) => a + (e.sets || 0), 0)} Sätze` }),
+            h('span.mp', { text: last ? `zuletzt ${lc(relativeDay(last.startedAt))}` : 'noch nie' }),
+          ]),
+          sessions.length ? h('div.small.plan-reason', { text: sug.reason }) : null,
+          h('button.btn.primary.block', { html: svgIcon.play + '<span>Training starten</span>', onclick: (e) => { e.stopPropagation(); navigate('/plan/' + p.id + '?start=1'); } }),
+        ]),
+      ]));
+    }
+
     // Pläne
     root.append(h('div.subhead', {}, [
       h('h2', { text: 'Deine Pläne' }),
@@ -56,27 +78,9 @@ export function render(root, { navigate }) {
       return;
     }
 
-    // Empfehlung (Erholungsstatus + Reihenfolge) nur als Markierung am Plan, nicht als eigene Karte
-    const sug = active ? null : suggestPlan();
-    const deload = settings.deloadUntil && settings.deloadUntil > Date.now();
     const list = h('div.list');
-    for (const p of plans) {
-      const last = [...sessions].reverse().find(s => s.planId === p.id);
-      const isNext = sug?.plan?.id === p.id;
-      const meta = [`${p.exercises.length} Übung${p.exercises.length === 1 ? '' : 'en'}`];
-      if (last) meta.push('zuletzt ' + lc(relativeDay(last.startedAt)));
-      list.append(h('div.card.tappable.plan-card' + (isNext ? '.next' : ''), { onclick: () => navigate('/plan/' + p.id) }, [
-        planThumb(p),
-        h('div.grow', {}, [
-          isNext ? h('div.plan-flag', { text: deload ? 'Heute dran · Deload' : 'Heute dran' }) : null,
-          h('div.truncate', { text: p.name, style: { fontWeight: 700, fontSize: '17px' } }),
-          h('div.meta', { text: meta.join(' · ') }),
-        ]),
-        p.exercises.length ? h('button.btn.icon.plan-play' + (isNext ? '.primary' : ''), { 'aria-label': 'Training starten', html: svgIcon.play, onclick: (e) => { e.stopPropagation(); navigate('/plan/' + p.id + '?start=1'); } }) : null,
-      ]));
-    }
+    for (const p of plans) list.append(planCard(p, sessions, navigate));
     root.append(list);
-    if (sug?.reason && sessions.length) root.append(h('p.small.faint.plan-reason', { text: sug.reason }));
   };
 
   const createPlan = async () => {
@@ -141,14 +145,31 @@ export function openPlanMenu(p, navigate) {
   ]);
 }
 
-/** Mini-Körperkarte mit den Muskeln, die der Plan trifft */
-function planThumb(plan) {
+/** Plan-Karte mit Bild: eigenes Foto (plan.image) oder Illustration – große Körperkarte in Planfarbe, Muskeln leuchten */
+function planCard(p, sessions, navigate) {
+  const last = [...sessions].reverse().find(s => s.planId === p.id);
+  const sets = p.exercises.reduce((a, e) => a + (e.sets || 0), 0);
+  const meta = [`${p.exercises.length} Übung${p.exercises.length === 1 ? '' : 'en'}`, `${sets} Sätze`];
+  if (last) meta.push('zuletzt ' + lc(relativeDay(last.startedAt)));
+  return h('div.card.tappable.plan-card.art' + (p.image ? '.has-photo' : ''), { style: `--pc:${colorFor(p)}`, onclick: () => navigate('/plan/' + p.id) }, [
+    planArt(p),
+    h('div.plan-body', {}, [
+      h('div.plan-name', { text: p.name }),
+      h('div.meta', { text: meta.join(' · ') }),
+    ]),
+    p.exercises.length ? h('button.btn.icon.plan-play', { 'aria-label': 'Training starten', html: svgIcon.play, onclick: (e) => { e.stopPropagation(); navigate('/plan/' + p.id + '?start=1'); } }) : null,
+  ]);
+}
+
+/** Hintergrund der Plan-Karte: Foto oder Körperkarte (Seite mit den meisten getroffenen Muskeln) */
+function planArt(plan) {
+  if (plan.image) return h('div.art.photo', { style: { backgroundImage: `url("${plan.image}")` } });
   const fake = { entries: plan.exercises.map(e => ({ name: e.name, sets: Array.from({ length: Math.max(1, e.sets || 1) }, () => ({ done: true })) })) };
   const ms = muscleSets([fake]);
   const upper = ['chest', 'back', 'front_delt', 'side_delt', 'rear_delt', 'biceps', 'triceps'].reduce((a, k) => a + ms.totals[k], 0);
   const lower = ['quads', 'hamstrings', 'glutes', 'calves'].reduce((a, k) => a + ms.totals[k], 0);
   const side = lower > upper ? 'front' : (ms.totals.back > ms.totals.chest ? 'back' : 'front');
-  return h('div.plan-thumb', { html: bodyMapSvg(side, ms.totals, { mode: 'week', still: true, mono: true }) });
+  return h('div.art', { html: bodyMapSvg(side, ms.totals, { mode: 'week', still: true, mono: true, color: 'var(--pc)' }) });
 }
 
 // „Heute“/„Gestern“ klein im Satz, Datumsangaben unverändert

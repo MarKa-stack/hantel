@@ -202,6 +202,7 @@ export function duplicatePlan(id) {
   const copy = newPlan({
     name: p.name + ' (Kopie)',
     note: p.note,
+    image: p.image || null,
     exercises: p.exercises.map(e => ({ ...e, id: uid() })),
   });
   return addPlan(copy);

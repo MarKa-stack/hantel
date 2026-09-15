@@ -1309,3 +1309,52 @@ h1 { font-size: 32px; letter-spacing: -0.035em; }
 .plan-card .plan-play.primary { background: var(--accent); color: var(--accent-text); }
 .plan-reason { margin: 10px 4px 0; }
 .subhead .btn.sm.ghost.icon { width: 36px; min-height: 36px; }
+
+/* ---------- Plan-Karten mit Bild (1.13) ---------- */
+.plan-card.art {
+  position: relative; overflow: hidden; min-height: 132px; padding: 16px 16px 14px; align-items: flex-end;
+  background: var(--surface); isolation: isolate;
+}
+.plan-card.art::before {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--pc) 38%, transparent), transparent 55%),
+    linear-gradient(110deg, var(--surface) 45%, color-mix(in srgb, var(--pc) 16%, var(--surface)) 100%);
+}
+.plan-card.art .art { position: absolute; right: 8px; top: -6%; bottom: -6%; width: 48%; z-index: 0; pointer-events: none; display: flex; justify-content: flex-end; }
+.plan-card.art .art .bodymap { height: 100%; width: auto; max-height: none; filter: drop-shadow(0 0 14px color-mix(in srgb, var(--pc) 35%, transparent)); }
+.plan-card.art .art .bodymap .body-sil { fill: color-mix(in srgb, var(--surface-3) 70%, var(--pc) 8%); }
+.plan-card.art .art .bodymap .muscle { stroke: var(--surface); stroke-width: 1.6; fill: color-mix(in srgb, var(--text-3) 24%, var(--surface-3)); }
+.plan-card.art .art .bodymap .muscle.detail { fill: color-mix(in srgb, var(--text-3) 14%, var(--surface-3)); }
+.plan-card.art .art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, var(--surface) 0%, transparent 45%); }
+.plan-card.art .plan-body { position: relative; z-index: 1; flex: 1; min-width: 0; }
+.plan-card.art .plan-name { font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: -0.02em; line-height: 1.15; }
+.plan-card.art .meta { font-size: 13px; color: var(--text-2); margin-top: 4px; }
+.plan-card.art .plan-play { position: relative; z-index: 1; width: 46px; min-height: 46px; border-radius: 15px; background: var(--pc); color: #fff; box-shadow: 0 6px 18px color-mix(in srgb, var(--pc) 40%, transparent); }
+.plan-card.art .plan-play svg { width: 18px; height: 18px; }
+
+/* eigenes Foto: Bild füllt die Karte, links dunkler Verlauf für den Text */
+.plan-card.art .art.photo { inset: 0; width: 100%; height: 100%; top: 0; bottom: 0; right: 0; background-size: cover; background-position: center; }
+.plan-card.art .art.photo::after { background: linear-gradient(90deg, rgba(10, 12, 16, 0.86) 0%, rgba(10, 12, 16, 0.45) 60%, rgba(10, 12, 16, 0.2) 100%); }
+.plan-card.art.has-photo::before { display: none; }
+.plan-card.art.has-photo, .plan-card.art.has-photo .plan-name, .plan-card.art.has-photo h2 { color: #fff; }
+.plan-card.art.has-photo .meta, .plan-card.art.has-photo .plan-reason { color: rgba(255, 255, 255, 0.78); }
+.plan-card.art.has-photo .meta-pills .mp { background: rgba(255, 255, 255, 0.14); color: #fff; }
+
+/* „Als Nächstes“: größer, mit Chips und Start-Button */
+.hero-card { min-height: 200px; margin: 14px 0 4px; padding: 18px; }
+.hero-card .plan-flag { color: var(--pc); }
+.hero-card h2 { font-size: 28px; letter-spacing: -0.03em; margin-top: 2px; }
+.hero-card .meta-pills { margin-top: 10px; }
+.hero-card .plan-reason { color: var(--text-2); margin-top: 10px; }
+.hero-card .btn.primary { margin-top: 14px; min-height: 54px; font-size: 17px; background: var(--pc); box-shadow: 0 8px 24px color-mix(in srgb, var(--pc) 35%, transparent); }
+.hero-card .art { width: 50%; top: -4%; bottom: -4%; }
+.hero-card .plan-body > .small.plan-reason, .hero-card .meta-pills { padding-right: 26%; }
+.hero-card .art::after { background: linear-gradient(90deg, var(--surface) 0%, transparent 50%); }
+.hero-card.has-photo .art::after { background: linear-gradient(90deg, rgba(10, 12, 16, 0.88) 0%, rgba(10, 12, 16, 0.5) 60%, rgba(10, 12, 16, 0.25) 100%); }
+.hero-card.has-photo .btn.primary { background: var(--pc); }
+:root[data-theme="light"] .plan-card.art.has-photo .btn.primary { color: #fff; }
+
+/* Bildwahl im Plan-Editor */
+.plan-image-row { display: flex; align-items: center; gap: 12px; }
+.plan-image-row .preview { width: 72px; height: 48px; border-radius: 10px; background: var(--surface-2) center/cover no-repeat; flex: none; }

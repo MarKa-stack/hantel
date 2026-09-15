@@ -171,7 +171,7 @@ const SIL_BODY = 'M100 62 C106 62 112 63 117 66 C132 68 148 72 158 80 C156 96 15
  * SVG-Körperkarte.
  * @param {'front'|'back'} side
  * @param {Record<string, number>} sets Sätze pro Muskelgruppe
- * @param {{mode?:'week'|'session', selected?:string}} opts
+ * @param {{mode?:'week'|'session', selected?:string, ratios?:object, mono?:boolean, color?:string, still?:boolean}} opts
  */
 export function bodyMapSvg(side, sets, opts = {}) {
   const regions = side === 'front' ? FRONT : BACK;
@@ -186,7 +186,7 @@ export function bodyMapSvg(side, sets, opts = {}) {
     // opts.ratios: fertige Intensitäten 0..1 (z.B. Ermüdung) statt Satzzahlen
     const ratio = opts.ratios ? (opts.ratios[muscle] || 0) : ratioFor(n, opts.mode);
     // mono: Akzentfarbe mit Deckkraft nach Intensität (ruhiger, z.B. für kleine Vorschauen) statt Grün→Rot
-    const color = opts.mono ? (ratio > 0 ? 'var(--accent)' : null) : intensityColor(ratio);
+    const color = opts.mono ? (ratio > 0 ? (opts.color || 'var(--accent)') : null) : intensityColor(ratio);
     const sel = opts.selected === muscle ? ' selected' : '';
     // --i steuert die gestaffelte Einblend-Animation („Aufleuchten“)
     const style = color ? ` style="fill:${color};${opts.mono ? `fill-opacity:${(0.45 + 0.55 * Math.min(1, ratio)).toFixed(2)};` : ''}--i:${idx++}"` : '';
