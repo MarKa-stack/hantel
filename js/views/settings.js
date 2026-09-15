@@ -1,16 +1,38 @@
 // Mehr: Einstellungen, KI-Import, Datensicherung, Installation
 import { h, svgIcon, toast, confirmSheet, fmtDate, isIOS, weekKey } from '../util.js';
 import { getSettings, updateSettings, importJSON, resetAll, getSessions, getPlans, deloadActive } from '../store.js';
-import { PROVIDERS, testConnection, listModels } from '../llm.js';
+import { PROVIDERS, testConnection, listModels, aiReady } from '../llm.js';
 import { PHOTOS, EQUIPMENT } from '../equipment.js';
 import { exportBackup } from '../backup.js';
 import { cloudPush, cloudPull } from '../cloud.js';
 import { exportCSV, exportICS, WEEKDAYS_DE } from '../exporters.js';
 
-export const APP_VERSION = '1.22.0';
+export const APP_VERSION = '1.23.0';
+
+const MORE_KEY = 'hantel.moreOpen';
+const moreOpen = new Set((() => { try { return JSON.parse(localStorage.getItem(MORE_KEY) || '[]'); } catch { return []; } })());
 
 export function render(root, { navigate }) {
   const s = getSettings();
+  // Einklappbare Bereiche (Standard: alle zu), Zustand wird gemerkt
+  let out = root;
+  const section = (key, title, sub) => {
+    const open = moreOpen.has(key);
+    const body = h('div.more-body');
+    body.hidden = !open;
+    const head = h('button.card.tappable.more-head', { class: open ? 'open' : '', 'aria-expanded': String(open), onclick: () => {
+      const now = body.hidden; body.hidden = !now; head.classList.toggle('open', now); head.setAttribute('aria-expanded', String(now));
+      if (now) moreOpen.add(key); else moreOpen.delete(key);
+      try { localStorage.setItem(MORE_KEY, JSON.stringify([...moreOpen])); } catch { /* egal */ }
+    } }, [
+      h('div.row.between', {}, [
+        h('div.grow.min0', {}, [h('b', { text: title }), sub ? h('div.small.faint.truncate', { text: sub }) : null]),
+        h('span.more-chev', { html: svgIcon.chevron }),
+      ]),
+    ]);
+    root.append(head, body);
+    return body;
+  };
 
   root.append(h('div.page-head', {}, [h('div', {}, [h('h1', { text: 'Mehr' })])]));
 
@@ -54,8 +76,8 @@ export function render(root, { navigate }) {
   const nameIn = h('input.input', { type: 'text', value: s.name || '', placeholder: 'Vorname', autocomplete: 'given-name', style: { width: '150px', minHeight: '42px' } });
   nameIn.addEventListener('change', () => updateSettings({ name: nameIn.value.trim() }));
 
-  root.append(h('div.subhead', {}, [h('h2', { text: 'Darstellung' })]));
-  root.append(h('div.card', {}, [
+  out = section('look', 'Darstellung', 'Erscheinungsbild, Name, Wochenziel');
+  out.append(h('div.card', {}, [
     switchRow('Erscheinungsbild', 'Dunkel ist Standard – Hell oder automatisch nach System', themeSeg),
     switchRow('Dein Name', 'Für die Begrüßung auf dem Startbildschirm', nameIn),
     switchRow('Wochenziel', 'Trainings pro Woche für den Ring auf dem Startbildschirm', goalIn),
@@ -75,8 +97,8 @@ export function render(root, { navigate }) {
     updateSettings({ sex: v }); for (const x of e.target.parentNode.children) x.classList.toggle('active', x.textContent === l);
   } })));
 
-  root.append(h('div.subhead', {}, [h('h2', { text: 'Training' })]));
-  root.append(h('div.card', {}, [
+  out = section('training', 'Training', (deloadActive() ? 'Deload aktiv · ' : '') + `Pause ${s.defaultRestSec} s · ${s.unit} · Ton ${s.sound ? 'an' : 'aus'}`);
+  out.append(h('div.card', {}, [
     switchRow('Deload-Woche', deloadActive() ? `Aktiv bis ${fmtDate(s.deloadUntil)} – Gewichte −15 %, ein Satz weniger` : 'Eine Woche leichter trainieren: −15 % Gewicht, ein Satz weniger, Progression pausiert', deloadBtn),
     switchRow('Volumen-Ziel', 'Sätze je Muskelgruppe und Woche (Körperkarte und Balken färben sich danach)', h('div.row', { style: { gap: '6px' } }, [volMin, h('span.faint', { text: '–' }), volMax])),
     switchRow('Kraftstandards', 'Vergleichswerte auf der Übungsseite (relativ zum Körpergewicht)', sexSeg),
@@ -93,7 +115,7 @@ export function render(root, { navigate }) {
   ]));
 
   // ---------- KI (Claude oder OpenAI) ----------
-  root.append(h('div.subhead', {}, [h('h2', { text: 'KI (optional)' })]));
+  out = section('ai', 'KI (optional)', aiReady() ? `${PROVIDERS[s.aiProvider]?.label || 'Claude'} eingerichtet` : 'Nicht eingerichtet – Rezepte, Fast Food, Foto-Analyse');
   const aiBox = h('div');
   const drawAi = () => {
     const st = getSettings();
@@ -180,10 +202,10 @@ export function render(root, { navigate }) {
     ]));
   };
   drawAi();
-  root.append(aiBox);
+  out.append(aiBox);
 
   // ---------- Daten ----------
-  root.append(h('div.subhead', {}, [h('h2', { text: 'Daten' })]));
+  out = section('data', 'Daten', 'Sicherung, CSV-Export, alles löschen');
   const fileIn = h('input', { type: 'file', accept: 'application/json,.json', style: { display: 'none' } });
   fileIn.addEventListener('change', async () => {
     const f = fileIn.files[0]; if (!f) return;
@@ -197,7 +219,7 @@ export function render(root, { navigate }) {
     fileIn.value = '';
   });
 
-  root.append(h('div.card', {}, [
+  out.append(h('div.card', {}, [
     h('p.small.muted', { text: `${getPlans().length} Pläne · ${getSessions().length} Workouts gespeichert. Die Daten liegen nur in diesem Browser – sichere sie regelmäßig.`
       + (s.lastBackupAt ? ` Letzte Sicherung: ${fmtDate(s.lastBackupAt)}.` : ' Noch keine Sicherung erstellt.') }),
     h('div.grid-2.mt', {}, [
@@ -214,7 +236,7 @@ export function render(root, { navigate }) {
   ]));
 
   // ---------- Cloud-Backup (GitHub Gist) ----------
-  root.append(h('div.subhead', {}, [h('h2', { text: 'Cloud-Backup' })]));
+  out = section('cloud', 'Cloud-Backup', s.gistToken ? 'GitHub Gist eingerichtet' : 'GitHub Gist – nicht eingerichtet');
   const tokenIn = h('input.input', { type: 'password', value: s.gistToken || '', placeholder: 'ghp_… oder github_pat_…', autocomplete: 'off', autocapitalize: 'off', spellcheck: false });
   tokenIn.addEventListener('change', () => updateSettings({ gistToken: tokenIn.value.trim() }));
   const cloudStatus = h('p.small.faint.mt');
@@ -240,7 +262,7 @@ export function render(root, { navigate }) {
     const r = await cloudPull();
     toast(`${r.plans} Pläne, ${r.sessions} Workouts aus der Cloud übernommen`);
   }) });
-  root.append(h('div.card', {}, [
+  out.append(h('div.card', {}, [
     h('p.small.muted', { html: 'Sichert deine Daten in einem <b>privaten GitHub-Gist</b> – automatisch nach jedem Workout, und auf einem neuen iPhone reicht der Token zum Wiederherstellen. Token anlegen: <a href="https://github.com/settings/tokens/new?scopes=gist&description=Hantel" target="_blank" rel="noopener">github.com → Token mit Scope „gist“</a>. Der Token bleibt nur auf diesem Gerät.' }),
     h('div.field.mt', {}, [h('label', { text: 'GitHub-Token' }), tokenIn]),
     switchRow('Automatisch sichern', 'Nach Workouts, Plan- und Körperänderungen (mit ein paar Sekunden Verzögerung)', toggle('cloudAutoSync')),
@@ -249,7 +271,7 @@ export function render(root, { navigate }) {
   ]));
 
   // ---------- Trainingstage → Kalender ----------
-  root.append(h('div.subhead', {}, [h('h2', { text: 'Trainingstage' })]));
+  out = section('days', 'Trainingstage', (s.trainingDays || []).length ? [1, 2, 3, 4, 5, 6, 0].filter(d => s.trainingDays.includes(d)).map(d => WEEKDAYS_DE[d]).join(' · ') + ` · ${s.trainingTime || '18:00'} Uhr` : 'Kalender-Abo mit Erinnerung');
   const days = new Set(s.trainingDays || []);
   const byDay = { ...(s.trainingPlanByDay || {}) };
   const planSel = h('div.stack', { style: { marginTop: '10px', gap: '8px' } });
@@ -272,7 +294,7 @@ export function render(root, { navigate }) {
   drawPlanSel();
   const timeIn = h('input.input', { type: 'time', value: s.trainingTime || '18:00', style: { width: '120px', minHeight: '40px' } });
   timeIn.addEventListener('change', () => updateSettings({ trainingTime: timeIn.value || '18:00' }));
-  root.append(h('div.card', {}, [
+  out.append(h('div.card', {}, [
     h('p.small.muted', { text: 'Wähle deine Gym-Tage. Daraus wird ein Kalender-Abo mit Erinnerung 30 Minuten vorher – der Termin landet über „Teilen“ direkt im Apple-Kalender.' }),
     h('div.mt', {}, [dayRow]),
     planSel,
@@ -283,8 +305,8 @@ export function render(root, { navigate }) {
   // ---------- Installation & Siri ----------
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const startUrl = location.origin + location.pathname + '?action=start';
-  root.append(h('div.subhead', {}, [h('h2', { text: 'App installieren' })]));
-  root.append(h('div.card', {}, [
+  out = section('install', 'App installieren', `Home-Bildschirm, Siri-Kurzbefehl · Hantel ${APP_VERSION}`);
+  out.append(h('div.card', {}, [
     standalone
       ? h('p.small.muted', { text: 'Hantel läuft als installierte App.' })
       : h('p.small.muted', { html: 'Auf dem iPhone in Safari: <b>Teilen</b> (Quadrat mit Pfeil) → <b>Zum Home-Bildschirm</b>. Danach startet Hantel wie eine normale App – auch offline.' }),

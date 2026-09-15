@@ -1477,3 +1477,15 @@ details.credits a { color: var(--text-2); }
 .tab-toggle.mt { margin-top: 14px; }
 .history { margin-top: 8px; }
 .stat-days.weeks span { font-size: 10px; padding: 5px 0; }
+
+/* ---------- Mehr (1.22): Bereiche einklappbar ---------- */
+.more-head { display: block; width: 100%; text-align: left; font: inherit; color: inherit; margin-top: 10px; padding: 12px 14px 12px 16px; -webkit-tap-highlight-color: transparent; }
+.more-head b { font-family: var(--display); font-size: 16px; }
+.more-head .min0 { min-width: 0; }
+.more-chev { flex: none; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); margin-left: 8px; }
+.more-chev svg { width: 18px; height: 18px; fill: currentColor; transition: transform 0.2s ease; }
+.more-head.open .more-chev svg { transform: rotate(90deg); }
+.more-head.open { border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; }
+.more-body { margin: 6px 0 4px; }
+.more-body > .card { border-top-left-radius: 6px; border-top-right-radius: 6px; }
+.more-body > .card + .card { margin-top: 10px; }
