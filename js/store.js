@@ -24,7 +24,7 @@ const DEFAULT_SETTINGS = {
   theme: 'dark',        // 'dark' | 'light' | 'system'
   weeklyGoal: 4,        // Trainings pro Woche (Wochenring auf dem Startbildschirm)
   barWeight: 20,        // Standard-Stangengewicht für den Scheibenrechner
-  keepAliveAudio: true, // Pausentimer bei gesperrtem Bildschirm (lautloses Audio)
+  bgTimerAudio: false, // Pausentimer bei gesperrtem Bildschirm per lautlosem Audio – pausiert die Musik-App, deshalb aus
   warmupSets: true,     // Aufwärmsätze im Training vorschlagen
   name: '',             // Vorname für die Begrüßung auf dem Startbildschirm
   lastBackupAt: 0,      // Zeitpunkt der letzten Sicherung (Export)

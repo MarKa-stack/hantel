@@ -8,7 +8,6 @@ import * as planDetail from './views/plan-detail.js';
 import * as planEdit from './views/plan-edit.js';
 import * as importView from './views/import.js';
 import * as workout from './views/workout.js';
-import * as timerView from './views/timer.js';
 import * as progress from './views/progress.js';
 import * as settings from './views/settings.js';
 import * as library from './views/library.js';
@@ -25,7 +24,6 @@ const routes = [
   { re: /^\/plan\/([^/]+)\/edit$/, view: planEdit, tab: 'plans' },
   { re: /^\/import$/, view: importView, tab: 'plans' },
   { re: /^\/workout$/, view: workout, tab: null },
-  { re: /^\/timer$/, view: timerView, tab: 'timer' },
   { re: /^\/progress$/, view: progress, tab: 'progress' },
   { re: /^\/exercise\/(.+)$/, view: progress, sub: 'exercise', tab: 'progress' },
   { re: /^\/session\/([^/]+)$/, view: progress, sub: 'session', tab: 'progress' },
@@ -97,7 +95,7 @@ function render() {
   viewEl.classList.add('enter-' + kind);
 }
 
-const ROOTS = new Set(['/plans', '/progress', '/food', '/timer', '/settings']);
+const ROOTS = new Set(['/plans', '/progress', '/food', '/settings']);
 
 // ---------- Theme ----------
 const mqDark = window.matchMedia('(prefers-color-scheme: dark)');
@@ -105,7 +103,7 @@ function applyTheme() {
   const pref = getSettings().theme || 'dark';
   const theme = pref === 'system' ? (mqDark.matches ? 'dark' : 'light') : pref;
   document.documentElement.dataset.theme = theme;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0f1115' : '#f4f5f8');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#182030' : '#f4f5f8');
 }
 mqDark.addEventListener?.('change', applyTheme);
 
@@ -123,7 +121,7 @@ if (action) {
   if (action === 'start') {
     const sug = suggestPlan();
     target = getActiveWorkout() ? '#/workout' : sug ? '#/plan/' + sug.plan.id + '?start=1' : '#/plans';
-  } else if (action === 'timer') target = '#/timer';
+  } else if (action === 'timer') target = '#/plans'; // Timer-Seite entfernt
   history.replaceState(null, '', location.pathname + target); // ohne hashchange, render() folgt direkt
 }
 render();

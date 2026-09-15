@@ -7,7 +7,7 @@ import { exportBackup } from '../backup.js';
 import { cloudPush, cloudPull } from '../cloud.js';
 import { exportCSV, exportICS, WEEKDAYS_DE } from '../exporters.js';
 
-export const APP_VERSION = '1.19.1';
+export const APP_VERSION = '1.20.0';
 
 export function render(root, { navigate }) {
   const s = getSettings();
@@ -83,7 +83,7 @@ export function render(root, { navigate }) {
     switchRow('Sprachansagen', 'Sagt „Pause vorbei“ und den nächsten Satz an – fürs Handy in der Hosentasche', toggle('speech')),
     switchRow('Standard-Pause', 'Sekunden zwischen Sätzen, falls die Übung keine eigene Pause hat', rest),
     switchRow('Pausentimer automatisch', 'Startet nach jedem abgehakten Satz', toggle('autoRestTimer')),
-    switchRow('Timer bei gesperrtem Bildschirm', 'Hält per lautlosem Audio die Verbindung – der Beep klingelt auch, wenn das Display aus ist', toggle('keepAliveAudio')),
+    switchRow('Timer bei gesperrtem Bildschirm', 'Hält per lautlosem Audio die Verbindung, damit der Beep auch bei ausgeschaltetem Display kommt – unterbricht dafür laufende Musik (Spotify, Apple Music). Standard: aus.', toggle('bgTimerAudio')),
     switchRow('Aufwärmsätze vorschlagen', '40 % × 10, 60 % × 6, 80 % × 3 vom Arbeitsgewicht (eingeklappt über Satz 1)', toggle('warmupSets')),
     switchRow('Stangengewicht', 'Standard für den Scheibenrechner (kg), pro Übung änderbar', barSeg),
     switchRow('Ton', 'Signal, wenn die Pause vorbei ist', toggle('sound')),
@@ -295,7 +295,6 @@ export function render(root, { navigate }) {
         h('code.kbd.truncate', { text: startUrl, style: { flex: '1', padding: '8px 10px' } }),
         h('button.btn.sm.ghost', { text: 'Kopieren', onclick: async () => { try { await navigator.clipboard.writeText(startUrl); toast('Adresse kopiert'); } catch { toast('Kopieren nicht möglich – Adresse markieren'); } } }),
       ]),
-      h('p.small.faint', { style: { marginTop: '6px' }, text: 'Mit ?action=timer öffnet sich stattdessen der Timer.' }),
     ]),
     // Bildnachweise für die mitgelieferten Gerätefotos (Wikimedia Commons)
     h('details.credits.mt', {}, [

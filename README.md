@@ -1,6 +1,6 @@
 # Hantel 🏋️
 
-Trainingsplan, Workout-Tracker und Pausentimer als installierbare Web-App (PWA) fürs iPhone.
+Trainingsplan, Workout-Tracker und Kalorienzähler als installierbare Web-App (PWA) fürs iPhone.
 Kein Build-Schritt, kein Backend – reines HTML/CSS/JavaScript, Daten bleiben auf dem Gerät.
 
 ## Funktionen
@@ -12,10 +12,9 @@ Kein Build-Schritt, kein Backend – reines HTML/CSS/JavaScript, Daten bleiben a
 - **Trainingsmodus**: eine Übung pro Seite mit animierter Bühne (Tipp → Ausführung & Gerät), schmaler Fortschrittsleiste, „Weiter“ als Hauptaktion unten (Beenden/Abbrechen unauffällig hinter „⋯“ oben rechts), Satztabelle (Nr · kg · Wdh · RIR · Haken – Werte direkt tippbar, ± in der aktuellen Zeile, RIR per Tipp durchzählen), Details hinter „⋯“ (Tipps, Scheibenrechner, Notiz, Maschineneinstellungen, Tauschen), „Letztes Training“ + „Heute empfohlen“, feste Navigation (Vorherige/Nächste/Abschließen), Auto-Speichern, automatischer **Pausentimer** mit Ton
 - **Double Progression**: Empfehlung pro Übung aus der Historie (alle Sätze am oberen Ende des Bereichs → +Gewichtsschritt, sonst Gewicht halten); Gewichtsschritt pro Übung konfigurierbar (Standard: Kurzhantel 2 kg, Maschine/Kabel 5 kg, Langhantel 2,5 kg); Hinweis bei Leistungsabfall, Reduzierung bleibt beim Nutzer
 - **PR-Erkennung**: höchstes Gewicht, meiste Wdh je Gewicht, bestes e1RM (Epley), höchstes Einheiten-Volumen – dezente Animation direkt nach dem Satz, Bereich „Rekorde“ je Übung
-- **Timer-Seite**: Countdown mit Presets + Stoppuhr (zeitstempelbasiert, stimmt auch nach Sperrbildschirm)
 - **Fortschritt**: Workouts pro Woche, Volumen, Serie; je Übung Kennzahlen (Bestes Gewicht, Top-Satz, e1RM, Volumen, Wdh) × Zeiträume (1M/3M/6M/1J/Gesamt) mit Tooltip (Datum, Gewicht × Wdh, Satz, e1RM), Veränderung („+13 kg in 5 Monaten“), Statistik und Rekorde
 - **Muskelgruppen**: Sätze je Muskelgruppe (primär 1,0 / sekundär 0,5) pro Woche als Balken + anatomische Körperkarte Vorder-/Rückseite (Brust, Delta-Köpfe, Bizeps/Trizeps, Bauch/Obliques, Lat/Trapez/Rückenstrecker, Gesäß, Quadrizeps, Beinbeuger, Waden; grün = leicht … rot = intensiv), Tipp auf Muskel → diese/letzte Woche, 4-Wochen-Schnitt, Übungen; Körperkarte auch beim Workout-Abschluss
-- **Studio-Tools im Training**: Maschineneinstellungen je Übung als Einzeiler (bleiben gespeichert), Scheibenrechner (Tipp aufs Gewicht, Stange 20/15/10 kg oder ohne; bei Maschinen eingeklappt), automatische Aufwärmsätze (40/60/80 %, nur vor dem ersten Arbeitssatz, zählen nicht als Volumen), RIR-Chips je Satz (schärfen die Progression), Übung für heute tauschen (gleiche Muskelgruppe), Supersätze (Pause erst nach der zweiten Übung), Pausentimer klingelt auch bei gesperrtem Bildschirm (lautloses Audio hält die Session offen)
+- **Studio-Tools im Training**: Maschineneinstellungen je Übung als Einzeiler (bleiben gespeichert), Scheibenrechner (Tipp aufs Gewicht, Stange 20/15/10 kg oder ohne; bei Maschinen eingeklappt), automatische Aufwärmsätze (40/60/80 %, nur vor dem ersten Arbeitssatz, zählen nicht als Volumen), RIR-Chips je Satz (schärfen die Progression), Übung für heute tauschen (gleiche Muskelgruppe), Supersätze (Pause erst nach der zweiten Übung), Pausentimer klingelt optional auch bei gesperrtem Bildschirm (Einstellung „Timer bei gesperrtem Bildschirm“, Standard aus, weil das lautlose Audio laufende Musik pausiert); Audio läuft als Ambient-Session (iOS 17+) und mischt sich unter Spotify/Apple Music
 - **Rund ums Training**: „Heute dran“-Karte mit A/B-Rotation, Gewicht & Maße mit Verlauf, Trainingskalender (Heatmap), vergangene Sessions korrigierbar, 1RM-Prozent-Tabelle je Übung
 - **Übungsbibliothek**: animierte Figuren aus konischen Kapseln (Start ↔ Endposition, `js/figure.js`), dazu je Übung ein **Gerätebild**: echtes Foto (16 Gerätetypen: Wikimedia Commons und Flickr unter CC BY/BY-SA/CC0, `img/equip/`, Bildnachweise unter „Mehr“; ohne freies Foto nur Wadenheben stehend, Hip Thrust, Matte) oder beschriftete SVG-Illustration (`js/equipment.js`), mit Aufsatz/Griff und Einstellhinweis – oder ein **eigenes Foto des Geräts im Studio** („Foto aus deinem Studio“, pro Gerätetyp, ≤ 900 px, eigener localStorage-Schlüssel `hantel.equipPhotos`) – im Info-Sheet über „Bewegung | Gerät“ oder Tipp aufs Bild; Muskelgruppen und 2–3 Ausführungstipps zu 25 Übungen – im Plan, im Workout (ⓘ) und unter „Mehr“
 - **Vorlagen**: Oberkörper/Unterkörper A+B (4-/5-Tage-Split) werden beim ersten Start angelegt; Zusatztag Samstag optional
@@ -32,7 +31,7 @@ Kein Build-Schritt, kein Backend – reines HTML/CSS/JavaScript, Daten bleiben a
 - **Meilensteine**: 23 aus dem Verlauf berechnete Marken (Workouts, Serien, Volumen, Rekorde, 100 kg …), Toast nach dem Workout, Seite `#/milestones` (`js/milestones.js`)
 - **Sprachansagen**: „Noch zehn Sekunden“, „Pause vorbei. Satz 2: 60 Kilo, 6 Wiederholungen“ (Web Speech API, Schalter unter „Mehr“)
 - **Notiz je Übung** in der Session (Stift-Button), erscheint beim nächsten Mal unter „Zuletzt“
-- **Siri-Kurzbefehl**: `?action=start` startet das heutige Training, `?action=timer` den Timer
+- **Siri-Kurzbefehl**: `?action=start` startet das heutige Training
 - **Kalender**: Trainingstage + Uhrzeit (+ optional Plan je Tag) als .ics mit Erinnerung, per Share-Sheet in den Apple-Kalender
 - **CSV-Export** aller Sätze (Semikolon, BOM – Excel/Numbers)
 - **Eigene Übungen**: Name, Aliase, Primär-/Sekundärmuskeln, Gewichtsschritt, Langhantel, Tipps – zählen in Bilanz, Erholung, Progression und Scheibenrechner (`js/views/custom-exercise.js`)
@@ -40,7 +39,7 @@ Kein Build-Schritt, kein Backend – reines HTML/CSS/JavaScript, Daten bleiben a
 - **Essen fotografieren**: Kamera/Galerie → Bild clientseitig auf 1024 px verkleinert und ohne EXIF neu kodiert → KI schätzt Gericht, Bestandteile, Gramm und Nährwerte (`food-image`-Aufgabe, JSON-Schema) → Prüf-Editor (Name, Bestandteile, Gramm-Stepper skaliert Makros, Werte direkt editierbar, hinzufügen/entfernen) → Tagebuch-Eintrag `kind: "ai", source: "ai_image"` mit Confidence high/medium/low, Datenschutzhinweis vor der ersten Analyse, „Zuletzt analysiert“ (`js/views/food-photo.js`)
 - **Rezept aus Zutaten**: Zutaten-Chips, Vorrat speichern/laden, Optionen (kcal min/max, Protein, Portionen, Zeit, Ernährungsform, Ausschlüsse, „Heute übrig“ aus den Tageszielen) → KI-Rezept mit ✓ vorhanden / „Zusätzlich benötigt“, Schritten und Nährwerten pro Portion → als Rezept speichern oder als Mahlzeit eintragen (Tag + Mahlzeit); **Rezepte im Web** über die OpenAI-Websuche – nur Treffer mit tatsächlich zitierter URL, verlinkt auf die Originalseite, kein Scraping (`js/views/food-generate.js`)
 - **KI-Backend (Cloudflare Worker, `worker/`)**: OpenAI-Key nur als Worker-Secret, App spricht per Zugangstoken mit `POST /ai/<aufgabe>`; Prompts/Schemas in `js/ai-tasks.js` (geteilt, Worker wird per `tools/build-worker.ps1` gebaut); Rate-Limit pro IP, Tageslimit, Parallelitäts-Limit, Timeout, Eingabe- und Schema-Prüfung, Nutzungszähler; alternativ weiterhin eigener Claude-/OpenAI-Key im Gerät
-- **Design (1.12)**: flache Flächen ohne Rahmen/Verläufe. Startseite: Wochenleiste (Mo–So, heute markiert, Trainingstage mit Punkt → Session), laufendes Workout, „Als Nächstes“-Karte (empfohlener Plan) und die Pläne als Bildkarten – Hintergrund ist eine SVG-Illustration in Planfarbe (Farbverlauf, Lichtkanten, Kurzhantel/Kettlebell/Langhantel je nach Zielmuskeln, `js/plan-art.js`) oder ein eigenes Foto (Plan bearbeiten → „Bild der Karte“, verkleinert auf ≤ 1000 px, bleibt im Gerät); Play startet direkt; Plan anlegen über „+“ (Vorlage/PDF/manuell), Plan-Optionen (⋯) in der Plan-Ansicht. Erholung, Wochenrückblick und Stagnations-Hinweis liegen unter „Fortschritt“; dort teilen sich Trainingskalender und Wochen-Chart eine Karte mit ‹ › und die Bestwerte haben eine eigene Seite „Rekorde“ (`/records`). Rezepte-Seite mit „Rezept aus Zutaten“ (KI-Generator) und „Frei beschreiben“. Dashboard mit Wochenring/Serie/letztem PR, Display-Schrift (Space Grotesk) für Titel und Zahlen, eigenes SVG-Icon-Set, Seitenübergänge und Mikro-Animationen (Haken zeichnet sich, Einrasten, Count-up, aufleuchtende Muskelkarte; `prefers-reduced-motion` wird respektiert), fokussierter Workout-Screen (kompakter Kopf, nur der aktuelle Satz groß, Pausenring inline, Auto-Scroll zum Ring), Begrüßung mit Namen (unter „Mehr“), iOS-Splash-Screens, Haptik über switch-Checkbox (iOS 17.4+)
+- **Design (1.20)**: tiefes Blaugrau mit weichem Lichtverlauf statt Schwarz, flache Flächen ohne Rahmen; Plan-Karten in Listenfarben (Orange, Blau, Violett, Grün …) mit je eigenem Gerät (Kurzhantel, Langhantel, Kettlebell, Scheiben, Kabelgriff – A/B unterscheidbar). Startseite: Wochenleiste (Mo–So, heute markiert, Trainingstage mit Punkt → Session), laufendes Workout, „Als Nächstes“-Karte (empfohlener Plan) und die Pläne als Bildkarten – Hintergrund ist eine SVG-Illustration in Planfarbe (Farbverlauf, Lichtkanten, Kurzhantel/Kettlebell/Langhantel je nach Zielmuskeln, `js/plan-art.js`) oder ein eigenes Foto (Plan bearbeiten → „Bild der Karte“, verkleinert auf ≤ 1000 px, bleibt im Gerät); Play startet direkt; Plan anlegen über „+“ (Vorlage/PDF/manuell), Plan-Optionen (⋯) in der Plan-Ansicht. Erholung, Wochenrückblick und Stagnations-Hinweis liegen unter „Fortschritt“; dort teilen sich Trainingskalender und Wochen-Chart eine Karte mit ‹ › und die Bestwerte haben eine eigene Seite „Rekorde“ (`/records`). Rezepte-Seite mit „Rezept aus Zutaten“ (KI-Generator) und „Frei beschreiben“. Dashboard mit Wochenring/Serie/letztem PR, Display-Schrift (Space Grotesk) für Titel und Zahlen, eigenes SVG-Icon-Set, Seitenübergänge und Mikro-Animationen (Haken zeichnet sich, Einrasten, Count-up, aufleuchtende Muskelkarte; `prefers-reduced-motion` wird respektiert), fokussierter Workout-Screen (kompakter Kopf, nur der aktuelle Satz groß, Pausenring inline, Auto-Scroll zum Ring), Begrüßung mit Namen (unter „Mehr“), iOS-Splash-Screens, Haptik über switch-Checkbox (iOS 17.4+)
 - **Offline** dank Service Worker; Dark ist Standard, Hell/Auto unter „Mehr“
 
 ## Lokal testen
@@ -76,7 +75,7 @@ sw.js                 Service Worker (Offline-Cache)
 css/app.css           Design-Tokens & Styles
 js/app.js             Router, Start, SW-Registrierung
 js/store.js           State + localStorage, Statistik-Helfer
-js/timer.js           Countdown/Stoppuhr, Ton, Wake Lock
+js/timer.js           Pausentimer-Engine, Ton (Ambient-Session), Wake Lock
 js/backup.js          Sicherung exportieren + Erinnerung
 js/cloud.js           Cloud-Backup über GitHub-Gist (Auto-Sync)
 js/recovery.js        Erholungsstatus je Muskel, Planvorschlag
@@ -100,7 +99,7 @@ js/exercise-db.js     Übungsbibliothek: Figuren, Muskeln, Tipps, Namenszuordnun
 js/templates.js       Eingebaute Plan-Vorlagen + Erststart-Seeding
 js/progression.js     Double Progression, Gewichtsschritte, PR-Erkennung (Epley-e1RM)
 js/muscles.js         Muskelgruppen-Taxonomie, Satz-Auswertung, Körperkarte (SVG)
-js/views/*.js         Seiten: Pläne, Plan, Bearbeiten, Import, Workout, Timer, Fortschritt, Mehr, Bibliothek, Übungs-Info, Körper
+js/views/*.js         Seiten: Pläne, Plan, Bearbeiten, Import, Workout, Fortschritt, Mehr, Bibliothek, Übungs-Info, Körper
 icons/                App-Icons (PNG via tools/make-icons.ps1)
 ```
 
@@ -111,7 +110,7 @@ plan     { id, name, note, exercises: [{ id, name, sets, reps, weight, restSec, 
 session  { id, planId, planName, startedAt, endedAt, durationSec, note,
            entries: [{ exerciseId, name, sessionNote, sets: [{ reps, weight, done, rir, type }] }], deload }
 settings { defaultRestSec, autoRestTimer, sound, vibrate, wakeLock, unit, apiKey, aiModel, aiProvider, openaiKey, openaiModel, theme, weeklyGoal,
-           barWeight, keepAliveAudio, warmupSets, name, lastBackupAt, lastBackupSessions,
+           barWeight, bgTimerAudio, warmupSets, name, lastBackupAt, lastBackupSessions,
            gistToken, gistId, cloudAutoSync, deloadUntil, volumeMin, volumeMax, sex, speech,
            trainingDays, trainingTime, trainingPlanByDay, milestonesSeen }
 customExercises [{ id, name, aliases, primary, secondary, weightStep, barbell, tips }]

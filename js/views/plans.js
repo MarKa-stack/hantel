@@ -2,7 +2,7 @@
 // „Als Nächstes“-Karte und die Pläne – jeweils mit Bild (eigenes Foto oder Körperkarte in Planfarbe). Rest unter „Fortschritt“.
 import { h, svgIcon, toast, actionSheet, confirmSheet, promptSheet, relativeDay, illustration, weekKey, isoWeek } from '../util.js';
 import { getPlans, addPlan, newPlan, deletePlan, duplicatePlan, movePlan, getSessions, getActiveWorkout, subscribe, getSettings } from '../store.js';
-import { planArtSvg } from '../plan-art.js';
+import { planArtSvg, planKind } from '../plan-art.js';
 import { suggestPlan } from '../recovery.js';
 
 let unsub = null;
@@ -160,19 +160,28 @@ function planCard(p, sessions, navigate) {
     p.exercises.length ? h('button.btn.icon.plan-play', { 'aria-label': 'Training starten', html: svgIcon.play, onclick: (e) => { e.stopPropagation(); navigate('/plan/' + p.id + '?start=1'); } }) : null,
   ]);
 }
-
 /** Hintergrund der Plan-Karte: eigenes Foto oder Illustration (Farbverlauf + Gerät) in Planfarbe */
 function planArt(plan, tall = false) {
   if (plan.image) return h('div.art.photo', { style: { backgroundImage: `url("${plan.image}")` } });
-  return h('div.art', { html: planArtSvg(plan, colorFor(plan), { tall }) });
+  return h('div.art', { html: planArtSvg(plan, colorFor(plan), { tall, kind: kindFor(plan) }) });
+}
+
+/** Gerät je Plan: nach Zielmuskeln, aber der zweite Plan derselben Art bekommt ein anderes Gerät (A/B unterscheidbar) */
+function kindFor(plan) {
+  const plans = getPlans();
+  const base = planKind(plan);
+  const nth = plans.filter(p => planKind(p) === base).findIndex(p => p.id === plan.id);
+  const alt = { dumbbell: ['dumbbell', 'barbell', 'cable'], kettlebell: ['kettlebell', 'plates', 'barbell'], barbell: ['barbell', 'plates', 'dumbbell'] };
+  const list = alt[base] || [base];
+  return list[Math.max(0, nth) % list.length];
 }
 
 // „Heute“/„Gestern“ klein im Satz, Datumsangaben unverändert
 const lc = (s) => s.replace(/^(Heute|Gestern)/, (m) => m.toLowerCase());
 
-const PALETTE = ['#ff5c35', '#3ddc84', '#4f8cff', '#ffc857', '#b26bff', '#2ad4c6'];
+// Farben in Listenreihenfolge, bewusst weit auseinander (Orange, Blau, Violett, Grün, Gelb, Türkis, Pink)
+const PALETTE = ['#ff5c35', '#4f8cff', '#b26bff', '#3ddc84', '#ffc857', '#2ad4c6', '#ff5c8a'];
 export function colorFor(plan) {
-  let hsh = 0;
-  for (const c of plan.id) hsh = (hsh * 31 + c.charCodeAt(0)) >>> 0;
-  return PALETTE[hsh % PALETTE.length];
+  const i = getPlans().findIndex(p => p.id === plan.id);
+  return PALETTE[(i < 0 ? 0 : i) % PALETTE.length];
 }

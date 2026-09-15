@@ -1443,3 +1443,12 @@ details.credits a { color: var(--text-2); }
 .tab-toggle svg.chev { transition: transform 0.2s ease; }
 .tab-toggle.open svg.chev { transform: rotate(90deg); }
 .tab-toggle + .card { margin-top: 8px; }
+
+/* ---------- Hintergrund (1.20): tiefes Blaugrau mit weichem Lichtverlauf statt Schwarz ---------- */
+:root { --bg: #151a26; --surface: #1d2432; --surface-2: #28303f; --surface-3: #333c4d; --border: #2b3344; --text-3: #7b849a; }
+:root[data-theme="light"] { --bg: #f4f5f8; --surface: #ffffff; --surface-2: #f1f2f6; --surface-3: #e4e7ee; --border: #e6e8ee; --text-3: #8a91a3; }
+:root:not([data-theme="light"]) body { background: radial-gradient(130% 55% at 50% -12%, #253048 0%, rgba(37, 48, 72, 0) 60%), linear-gradient(180deg, #182030 0%, #141926 45%, #12161f 100%); background-attachment: fixed; }
+:root:not([data-theme="light"]) .view { background: transparent; }
+:root:not([data-theme="light"]) .tabbar { background: color-mix(in srgb, #161c2a 84%, transparent); }
+:root:not([data-theme="light"]) .view.wk-view { background: radial-gradient(120% 34% at 50% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%); }
+.week-strip .days { background: var(--surface); }

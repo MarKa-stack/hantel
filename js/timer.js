@@ -5,8 +5,15 @@ import { getSettings } from './store.js';
 
 let audioCtx = null;
 
-/** Muss aus einer Nutzer-Geste heraus aufgerufen werden (iOS). */
+/** iOS 17+: Audio der App mischt sich unter laufende Musik statt sie zu pausieren (Ambient-Session) */
+function ambientSession() {
+  try { if (navigator.audioSession && navigator.audioSession.type !== 'ambient') navigator.audioSession.type = 'ambient'; } catch { /* nicht unterstützt */ }
+}
+
+/** Muss aus einer Nutzer-Geste heraus aufgerufen werden (iOS). Ohne Ton-Einstellung passiert nichts – kein Audio-Kontext, keine Musik-Unterbrechung. */
 export function unlockAudio() {
+  if (!getSettings().sound) return;
+  ambientSession();
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -89,7 +96,8 @@ export const keepAlive = {
   },
   /** Aus einer Nutzer-Geste heraus starten (z.B. „Satz abschließen“) */
   start() {
-    if (!getSettings().keepAliveAudio) return;
+    if (!getSettings().bgTimerAudio) return;
+    ambientSession();
     try {
       this._init();
       if (this.el.src !== this.silence) this.el.src = this.silence;

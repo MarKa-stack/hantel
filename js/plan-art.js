@@ -20,11 +20,11 @@ export function planKind(plan) {
 /**
  * @param {object} plan
  * @param {string} color Planfarbe (Hex)
- * @param {{ tall?: boolean }} opts tall = „Als Nächstes“-Karte
+ * @param {{ tall?: boolean, kind?: string }} opts tall = „Als Nächstes“-Karte, kind überschreibt das Gerät
  */
 export function planArtSvg(plan, color, opts = {}) {
   const id = 'pa' + (++seq);
-  const kind = planKind(plan);
+  const kind = opts.kind || planKind(plan);
   const W = 400, H = opts.tall ? 240 : 150;
   const defs = `
     <defs>
@@ -79,6 +79,18 @@ export function planArtSvg(plan, color, opts = {}) {
       <circle r="52" cy="14" fill="url(#${id}-plate)"/>
       <circle r="52" cy="14" fill="url(#${id}-rim)"/>
       <path d="M-34 -6 C-30 -28 -12 -38 8 -36 C-10 -30 -24 -18 -30 2 Z" fill="#fff" opacity="0.16"/>
+    </g>`;
+  } else if (kind === 'plates') {
+    // Hantelscheiben-Stapel: drei Scheiben leicht versetzt, mit Loch und Lichtkante
+    const disc = (dx, dy, r) => `<g transform="translate(${dx} ${dy})"><ellipse rx="${r}" ry="${r * 0.34}" cy="10" fill="#0f1116" opacity="0.5"/><ellipse rx="${r}" ry="${r * 0.34}" fill="url(#${id}-plate)"/><ellipse rx="${r}" ry="${r * 0.34}" fill="url(#${id}-rim)"/><ellipse rx="${r * 0.72}" ry="${r * 0.24}" fill="#0f1116" opacity="0.25"/><ellipse rx="${r * 0.14}" ry="${r * 0.05}" fill="#0f1116" opacity="0.7"/></g>`;
+    art = `<g transform="translate(${cx} ${cy + 20})" filter="url(#${id}-shadow)">${disc(0, 30, 70)}${disc(6, 8, 66)}${disc(-4, -16, 62)}</g>`;
+  } else if (kind === 'cable') {
+    // Kabelzug-Griff: Karabiner, Kabel und ein D-Griff mit Metallbügel
+    art = `<g transform="translate(${cx + 10} ${cy - 10}) rotate(-18)" filter="url(#${id}-shadow)">
+      <line x1="0" y1="-160" x2="0" y2="-54" stroke="#9aa3b4" stroke-width="5" stroke-linecap="round"/>
+      <rect x="-9" y="-62" width="18" height="30" rx="9" fill="none" stroke="url(#${id}-metal)" stroke-width="6"/>
+      <path d="M-40 -20 C-40 -48 40 -48 40 -20 L40 20 C40 48 -40 48 -40 20 Z" fill="none" stroke="url(#${id}-metal)" stroke-width="12" stroke-linejoin="round"/>
+      <rect x="-58" y="-14" width="116" height="28" rx="14" fill="url(#${id}-plate)"/><rect x="-58" y="-14" width="116" height="28" rx="14" fill="url(#${id}-rim)"/>
     </g>`;
   } else {
     // Langhantel: lange Stange, je drei Scheiben außen
