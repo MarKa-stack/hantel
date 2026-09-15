@@ -83,7 +83,7 @@ function renderDay(root, { navigate, query }) {
       for (const e of entries) {
         body.append(h('div.food-row', { onclick: () => openEntrySheet(curKey, e, draw) }, [
           h('div.grow', {}, [
-            h('div.truncate', { html: escapeHtml(e.name) + (e.source === 'ai_image' ? ' <span class="pill accent sm">KI-Schätzung</span>' : ''), style: { fontWeight: 600 } }),
+            h('div.clamp2', { html: escapeHtml(e.name) + (e.source === 'ai_image' ? ' <span class="pill accent sm">KI-Schätzung</span>' : ''), style: { fontWeight: 600 } }),
             h('div.small.faint', { text: (e.kind === 'recipe' ? `${String(e.servings).replace('.', ',')} Portion${e.servings === 1 ? '' : 'en'} · ` : `${e.grams} g · `) + `${fmtG(e.protein)} g P · ${fmtG(e.carbs)} g KH · ${fmtG(e.fat)} g F` }),
           ]),
           h('div.kcal', { text: fmtKcal(e.kcal) }),
@@ -214,7 +214,7 @@ export function openAddSheet(meal, dayKey, onDone, opts = {}) {
     const row = (kind, item, extra = '') => h('div.food-row', { onclick: () => kind === 'recipe' ? pickRecipe(item) : pickFood(item) }, [
       kind === 'recipe' ? h('span.pill.accent', { text: 'Rezept' }) : item.source === 'base' ? null : h('span.pill', { text: item.source === 'off' ? 'OFF' : item.source === 'ai' ? 'KI' : 'Eigen' }),
       h('div.grow', {}, [
-        h('div.truncate', { text: item.name + (item.brand ? ` · ${item.brand}` : ''), style: { fontWeight: 600 } }),
+        h('div.clamp2', { text: item.name + (item.brand ? ` · ${item.brand}` : ''), style: { fontWeight: 600 } }),
         h('div.small.faint', { text: kind === 'recipe' ? `${fmtKcal(recipeTotals(item).perServing.kcal)} kcal · ${fmtG(recipeTotals(item).perServing.protein)} g P pro Portion` : `${fmtKcal(item.per100.kcal)} kcal · ${fmtG(item.per100.protein)} g P pro 100 ${item.unit || 'g'}${extra}` }),
       ]),
       h('div', { html: svgIcon.chevron }),
@@ -500,13 +500,15 @@ export function openAiSheet({ meal = 'lunch', dayKey = dateKey(), onDone = () =>
         const kcalEl = h('span.kcal');
         const upd = () => { kcalEl.textContent = fmtKcal(macros(it.per100, it.grams).kcal); updateTotal(); };
         gIn.addEventListener('input', () => { it.grams = parseNum(gIn.value) || 0; upd(); });
-        list.append(h('div.food-row', {}, [
-          h('div.grow', {}, [
-            h('div.truncate', { text: it.name + (it.brand ? ` · ${it.brand}` : ''), style: { fontWeight: 600 } }),
-            h('div.small.faint', { text: `${fmtKcal(it.per100.kcal)} kcal · ${fmtG(it.per100.protein)} g P pro 100 ${it.unit}` + (it.note ? ` · ${it.note}` : '') }),
+        list.append(h('div.ing-row', {}, [
+          h('div.ing-top', {}, [
+            h('div.ing-name.clamp2', { text: it.name + (it.brand ? ` · ${it.brand}` : '') }),
+            h('button.btn.icon.ghost', { html: svgIcon.trash, 'aria-label': 'Entfernen', style: { width: '36px', minHeight: '36px' }, onclick: () => { parsed.items.splice(i, 1); drawParsed(); } }),
           ]),
-          gIn, h('span.small.faint', { text: it.unit }), kcalEl,
-          h('button.btn.icon.ghost', { html: svgIcon.trash, 'aria-label': 'Entfernen', style: { width: '36px', minHeight: '36px' }, onclick: () => { parsed.items.splice(i, 1); drawParsed(); } }),
+          h('div.ing-bottom', {}, [
+            h('div.small.faint.grow.clamp2', { text: `${fmtKcal(it.per100.kcal)} kcal · ${fmtG(it.per100.protein)} g P pro 100 ${it.unit}` + (it.note ? ` · ${it.note}` : '') }),
+            gIn, h('span.small.faint', { text: it.unit }), kcalEl,
+          ]),
         ]));
         upd();
       });
@@ -571,7 +573,7 @@ function renderRecipes(root, { navigate }) {
   for (const r of list) {
     const t = recipeTotals(r);
     card.append(h('div.food-row', { onclick: () => navigate('/food/recipe/' + r.id) }, [
-      h('div.grow', {}, [h('div.truncate', { text: r.name, style: { fontWeight: 600 } }), h('div.small.faint', { text: `${r.servings} Portionen · ${r.items.length} Zutaten · pro Portion ${fmtKcal(t.perServing.kcal)} kcal · ${fmtG(t.perServing.protein)} g P` })]),
+      h('div.grow.min0', {}, [h('div.clamp2', { text: r.name, style: { fontWeight: 600 } }), h('div.small.faint', { text: `${r.servings} Portionen · ${r.items.length} Zutaten · pro Portion ${fmtKcal(t.perServing.kcal)} kcal · ${fmtG(t.perServing.protein)} g P` })]),
       h('div', { html: svgIcon.chevron }),
     ]));
   }
@@ -588,10 +590,11 @@ function renderRecipeEditor(root, { params, navigate }) {
   root.append(h('button.back', { html: svgIcon.back + '<span>Rezepte</span>', onclick: () => navigate('/food/recipes') }));
   root.append(h('div.page-head', {}, [h('h1', { text: isNew ? 'Neues Rezept' : 'Rezept' })]));
   const name = h('input.input', { type: 'text', value: d.name, placeholder: 'z.B. Hähnchen-Frischkäse-Pfanne' });
-  const serv = h('input.input.num', { type: 'text', inputmode: 'numeric', value: String(d.servings) });
+  const serv = h('input.input.num', { type: 'text', inputmode: 'numeric', value: String(d.servings), style: { width: '90px' } });
   name.addEventListener('input', () => { d.name = name.value; });
   serv.addEventListener('input', () => { d.servings = Math.max(1, parseInt(serv.value, 10) || 1); drawTotals(); });
-  root.append(h('div.row', { style: { gap: '10px' } }, [h('div.field.grow', {}, [h('label', { text: 'Name' }), name]), h('div.field', { style: { width: '90px' } }, [h('label', { text: 'Portionen' }), serv])]));
+  root.append(h('div.field', {}, [h('label', { text: 'Name' }), name]));
+  root.append(h('div.row.between.mt', {}, [h('label.small.muted', { text: 'Portionen' }), serv]));
 
   root.append(h('div.subhead', {}, [h('h2', { text: 'Zutaten' })]));
   const list = h('div.card');
@@ -613,10 +616,16 @@ function renderRecipeEditor(root, { params, navigate }) {
       const gIn = h('input.input.num', { type: 'text', inputmode: 'decimal', value: String(it.grams), style: { width: '76px', minHeight: '38px' } });
       const kcalEl = h('span.kcal', { text: fmtKcal(macros(it.per100, it.grams).kcal) });
       gIn.addEventListener('input', () => { it.grams = parseNum(gIn.value) || 0; kcalEl.textContent = fmtKcal(macros(it.per100, it.grams).kcal); drawTotals(); });
-      list.append(h('div.food-row', {}, [
-        h('div.grow', {}, [h('div.truncate', { text: it.name, style: { fontWeight: 600 } }), h('div.small.faint', { text: `${fmtKcal(it.per100.kcal)} kcal · ${fmtG(it.per100.protein)} g P / 100 g` })]),
-        gIn, h('span.small.faint', { text: 'g' }), kcalEl,
-        h('button.btn.icon.ghost', { html: svgIcon.trash, 'aria-label': 'Zutat entfernen', style: { width: '36px', minHeight: '36px' }, onclick: () => { d.items.splice(i, 1); drawList(); } }),
+      // Zwei Zeilen: Name darf umbrechen (bis zwei Zeilen), darunter Nährwerte + Menge + kcal
+      list.append(h('div.ing-row', {}, [
+        h('div.ing-top', {}, [
+          h('div.ing-name.clamp2', { text: it.name }),
+          h('button.btn.icon.ghost', { html: svgIcon.trash, 'aria-label': 'Zutat entfernen', style: { width: '36px', minHeight: '36px' }, onclick: () => { d.items.splice(i, 1); drawList(); } }),
+        ]),
+        h('div.ing-bottom', {}, [
+          h('div.small.faint.grow', { text: `${fmtKcal(it.per100.kcal)} kcal · ${fmtG(it.per100.protein)} g P / 100 g` }),
+          gIn, h('span.small.faint', { text: 'g' }), kcalEl,
+        ]),
       ]));
     });
     drawTotals();
@@ -675,7 +684,7 @@ function renderMyFoods(root, { navigate }) {
       const card = h('div.card');
       for (const f of foods) card.append(h('div.food-row', { onclick: () => openFoodEditor(f, draw) }, [
         h('button.star' + (f.favorite ? '.on' : ''), { html: svgIcon.star, 'aria-label': 'Favorit', onclick: (e) => { e.stopPropagation(); saveFood({ id: f.id, favorite: !f.favorite }); draw(); } }),
-        h('div.grow', {}, [h('div.truncate', { text: f.name + (f.brand ? ` · ${f.brand}` : ''), style: { fontWeight: 600 } }), h('div.small.faint', { text: `${fmtKcal(f.per100.kcal)} kcal · ${fmtG(f.per100.protein)} g P / 100 ${f.unit || 'g'}` + (f.source === 'off' ? ' · Open Food Facts' : f.source === 'ai' ? ' · KI' : '') })]),
+        h('div.grow.min0', {}, [h('div.clamp2', { text: f.name + (f.brand ? ` · ${f.brand}` : ''), style: { fontWeight: 600 } }), h('div.small.faint', { text: `${fmtKcal(f.per100.kcal)} kcal · ${fmtG(f.per100.protein)} g P / 100 ${f.unit || 'g'}` + (f.source === 'off' ? ' · Open Food Facts' : f.source === 'ai' ? ' · KI' : '') })]),
         h('div', { html: svgIcon.chevron }),
       ]));
       box.append(card);

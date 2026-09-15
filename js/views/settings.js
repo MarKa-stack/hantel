@@ -7,7 +7,7 @@ import { exportBackup } from '../backup.js';
 import { cloudPush, cloudPull } from '../cloud.js';
 import { exportCSV, exportICS, WEEKDAYS_DE } from '../exporters.js';
 
-export const APP_VERSION = '1.23.0';
+export const APP_VERSION = '1.23.1';
 
 const MORE_KEY = 'hantel.moreOpen';
 const moreOpen = new Set((() => { try { return JSON.parse(localStorage.getItem(MORE_KEY) || '[]'); } catch { return []; } })());
