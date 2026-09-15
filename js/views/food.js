@@ -519,13 +519,15 @@ function renderRecipes(root, { navigate }) {
   root.append(h('button.back', { html: svgIcon.back + '<span>Essen</span>', onclick: () => navigate('/food') }));
   root.append(h('div.page-head', {}, [
     h('div', {}, [h('div.eyebrow', { text: `${getRecipes().length} Rezepte` }), h('h1', { text: 'Rezepte' })]),
-    h('div.row', { style: { gap: '6px' } }, [
-      h('button.btn.sm.ghost', { text: 'KI', onclick: () => openAiSheet({ recipeMode: true, onRecipe: (r) => navigate('/food/recipe/' + r.id) }) }),
-      h('button.btn.sm.ghost.icon', { 'aria-label': 'Neues Rezept', html: svgIcon.plus, onclick: () => navigate('/food/recipe/new') }),
-    ]),
+    h('button.btn.sm.ghost.icon', { 'aria-label': 'Neues Rezept', html: svgIcon.plus, onclick: () => navigate('/food/recipe/new') }),
+  ]));
+  // KI-Wege: Rezept aus Zutaten (mit Web-Rezepten) oder in einem Satz beschreiben
+  root.append(h('div.grid-2.mb', {}, [
+    h('button.btn.ai-btn', { html: svgIcon.sparkle + '<span>Rezept aus Zutaten</span>', onclick: () => navigate('/food/generate') }),
+    h('button.btn.ai-btn', { html: svgIcon.doc + '<span>Frei beschreiben</span>', onclick: () => openAiSheet({ recipeMode: true, onRecipe: (r) => navigate('/food/recipe/' + r.id) }) }),
   ]));
   const list = getRecipes();
-  if (!list.length) { root.append(h('div.card', {}, [h('p.small.muted', { text: 'Noch keine Rezepte. Per „KI“ in einem Satz beschreiben oder mit „+“ Zutat für Zutat anlegen. Ein Rezept trägst du danach mit zwei Tipps als Portion ein.' })])); return; }
+  if (!list.length) { root.append(h('div.card', {}, [h('p.small.muted', { text: 'Noch keine Rezepte. Oben per KI aus deinen Zutaten erstellen lassen, in einem Satz beschreiben oder mit „+“ Zutat für Zutat anlegen. Ein Rezept trägst du danach mit zwei Tipps als Portion ein.' })])); return; }
   const card = h('div.card');
   for (const r of list) {
     const t = recipeTotals(r);

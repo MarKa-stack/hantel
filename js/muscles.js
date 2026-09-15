@@ -165,8 +165,8 @@ const REGION_MUSCLE = {
 };
 
 // Silhouette: Kopf, Hals, dann je Seite Arm (hinten) und Rumpf+Bein (davor); rechte Hälfte wird gespiegelt
-const SIL_ARM = 'M150 78 C162 76 176 82 179 98 C183 128 181 156 181 174 C187 202 191 226 189 246 C194 258 195 270 190 282 C186 286 180 286 178 282 C175 270 175 258 176 248 C171 226 165 202 161 178 C155 152 150 128 147 106 C147 96 148 86 150 78 Z';
-const SIL_BODY = 'M100 62 C106 62 112 63 117 66 C132 68 148 72 158 80 C156 96 151 110 147 120 C144 148 141 176 138 200 C139 218 145 230 148 244 C151 282 147 320 141 342 C142 372 140 396 137 408 C142 412 144 418 140 421 L108 421 C106 416 108 410 109 406 C108 380 108 376 110 350 C108 322 106 290 103 262 C102 254 101 250 100 248 Z';
+const SIL_ARM = 'M150 78 C162 76 176 82 179 98 C183 128 181 156 181 174 C187 202 191 226 189 246 C196 254 198 262 196 270 C195 277 193 283 189 285 C185 288 179 287 177 283 C174 272 174 260 176 248 C171 226 165 202 161 178 C155 152 150 128 147 106 C147 96 148 86 150 78 Z';
+const SIL_BODY = 'M100 62 C106 62 112 63 117 66 C132 68 148 72 158 80 C156 96 151 110 147 120 C144 148 141 176 138 200 C139 218 145 230 148 244 C151 282 147 320 141 342 C142 372 140 396 137 408 C144 411 150 417 146 422 L106 422 C104 416 107 410 109 406 C108 380 108 376 110 350 C108 322 106 290 103 262 C102 254 101 250 100 248 Z';
 /**
  * SVG-Körperkarte.
  * @param {'front'|'back'} side
@@ -195,7 +195,7 @@ export function bodyMapSvg(side, sets, opts = {}) {
   half.push(`<path class="muscle-lines" d="${LINES[side]}"/>`);
   const h = half.join('');
   const parts = [
-    `<ellipse class="body-sil" cx="100" cy="30" rx="19" ry="23"/><path class="body-sil" d="M90 44 L110 44 L113 68 L87 68 Z"/>`,
+    `<path class="body-sil head" d="M100 4 C114 4 123 16 123 32 C123 46 113 58 100 60 C87 58 77 46 77 32 C77 16 86 4 100 4 Z"/><path class="body-sil" d="M89 50 L111 50 L114 70 L86 70 Z"/>`,
     `<g>${h}</g><g transform="translate(200 0) scale(-1 1)">${h}</g>`,
   ];
   return `<svg class="bodymap${opts.still ? " still" : ""}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Körperkarte ${side === "front" ? "Vorderseite" : "Rückseite"}">${parts.join("")}</svg>`;

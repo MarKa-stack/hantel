@@ -129,7 +129,7 @@ export function render(root, { navigate }) {
       ]),
       h('p.small.faint.mt', { text: `Ballaststoffe ≈ ${fmtG(n.fiber)} g · Alle Werte sind KI-Schätzungen.` }),
       h('div.actions', {}, [
-        h('button.btn.ghost', { text: 'Rezept speichern', onclick: () => { const rec = persist(r); toast(`„${rec.name}“ unter Rezepte gespeichert`); } }),
+        h('button.btn.ghost', { text: 'Rezept speichern', onclick: () => { const rec = persist(r); toast(`„${rec.name}“ unter Rezepte gespeichert`); navigate('/food/recipe/' + rec.id); } }),
         h('button.btn.good', { text: 'Als Mahlzeit eintragen', onclick: () => {
           const rec = toRecipe(r);
           openServingsSheet(rec, { servings: 1, meal: 'dinner', dayPick: true, onCommit: (n2, meal, key) => { const saved = persist(r); addDiaryEntry(key, recipeEntry(saved, n2, meal)); toast('Eingetragen'); navigate('/food?d=' + key); } });

@@ -32,6 +32,7 @@ const routes = [
   { re: /^\/muscles$/, view: progress, sub: 'muscles', tab: 'progress' },
   { re: /^\/week\/(\d+)$/, view: progress, sub: 'week', tab: 'progress' },
   { re: /^\/milestones$/, view: progress, sub: 'milestones', tab: 'progress' },
+  { re: /^\/records$/, view: progress, sub: 'records', tab: 'progress' },
   { re: /^\/body$/, view: body, tab: 'progress' },
   { re: /^\/food$/, view: food, tab: 'food' },
   { re: /^\/food\/recipes$/, view: food, sub: 'recipes', tab: 'food' },

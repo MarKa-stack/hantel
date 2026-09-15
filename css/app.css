@@ -1358,3 +1358,31 @@ h1 { font-size: 32px; letter-spacing: -0.035em; }
 /* Bildwahl im Plan-Editor */
 .plan-image-row { display: flex; align-items: center; gap: 12px; }
 .plan-image-row .preview { width: 72px; height: 48px; border-radius: 10px; background: var(--surface-2) center/cover no-repeat; flex: none; }
+
+/* ---------- Fortschritt: Karte mit Blätterfunktion (1.14) ---------- */
+.carousel { padding: 12px 14px 10px; }
+.carousel-head { margin-bottom: 8px; }
+.carousel-head b { font-size: 15px; }
+.carousel-head .btn.icon.sm { width: 32px; min-height: 32px; font-size: 20px; border-radius: 10px; border-color: transparent; background: var(--surface-2); }
+.carousel-body { min-height: 120px; }
+.carousel-dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
+.carousel-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--surface-3); }
+.carousel-dots i.on { background: var(--accent); }
+.pr-row .ico-box { width: 34px; height: 34px; border-radius: 10px; }
+
+/* ---------- Plan-Karten (1.14): Illustration füllt die Karte ---------- */
+.plan-card.art::before { display: none; }
+.plan-card.art .art { inset: 0; width: 100%; height: 100%; top: 0; bottom: 0; right: 0; display: block; }
+.plan-card.art .art .plan-art { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.plan-card.art .art::after { background: linear-gradient(90deg, rgba(12, 14, 19, 0.82) 0%, rgba(12, 14, 19, 0.35) 55%, rgba(12, 14, 19, 0.05) 100%); }
+.hero-card .art { width: 100%; top: 0; bottom: 0; }
+.hero-card .art::after { background: linear-gradient(90deg, rgba(12, 14, 19, 0.85) 0%, rgba(12, 14, 19, 0.4) 55%, rgba(12, 14, 19, 0.08) 100%), linear-gradient(0deg, rgba(12, 14, 19, 0.5) 0%, transparent 45%); }
+.plan-card.art, .plan-card.art .plan-name, .plan-card.art h2 { color: #fff; }
+.plan-card.art .meta, .plan-card.art .plan-reason, .hero-card .plan-reason { color: rgba(255, 255, 255, 0.78); }
+.plan-card.art .meta-pills .mp { background: rgba(255, 255, 255, 0.14); color: #fff; }
+.hero-card .plan-flag { color: #fff; opacity: 0.9; }
+.hero-card .plan-body > .small.plan-reason, .hero-card .meta-pills { padding-right: 0; }
+.plan-card.art .plan-play { background: rgba(255, 255, 255, 0.16); color: #fff; box-shadow: none; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.hero-card .btn.primary { background: #fff; color: #14171e; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
+.hero-card .btn.primary svg { fill: #14171e; }
+:root[data-theme="light"] .plan-card.art .btn.primary { color: #14171e; }

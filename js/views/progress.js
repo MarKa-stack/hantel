@@ -3,7 +3,6 @@ import { h, svg, svgIcon, fmtDuration, fmtDurationLong, fmtDate, fmtShortDate, f
 import { getSessions, getSession, deleteSession, updateSession, exerciseIndex, exerciseHistory, entryBest, sessionVolume, getSettings, getBodyLog, updateSettings, deloadActive } from '../store.js';
 import { prBaseline, sessionPRs, fmtKg, PR_LABELS, percentTable, inferWeightStep, plateauFor, deloadFor, plateauedExercises } from '../progression.js';
 import { recoveryStatus, fatigueRatios } from '../recovery.js';
-import { targets, dayTotals, dateKey, fmtKcal } from '../nutrition.js';
 import { MUSCLES, MUSCLE_NAME, muscleSets, sessionsInWeek, muscleWeekStats, bodyMapSvg, intensityColor, ratioFor, volumeTarget, volumeStatus } from '../muscles.js';
 import { shareSession } from '../share.js';
 import { milestonesReachedAt, allMilestones } from '../milestones.js';
@@ -18,6 +17,7 @@ export function render(root, ctx) {
   if (ctx.sub === 'muscles') return renderMuscles(root, ctx);
   if (ctx.sub === 'week') return renderWeek(root, ctx);
   if (ctx.sub === 'milestones') return renderMilestones(root, ctx);
+  if (ctx.sub === 'records') return renderRecords(root, ctx);
   return renderOverview(root, ctx);
 }
 
@@ -210,26 +210,6 @@ function renderOverview(root, { navigate }) {
     }
   }
 
-  // Essen heute: Kalorien + Protein gegen das Ziel
-  {
-    const t = targets();
-    const tot = dayTotals(dateKey());
-    if (t.ready || tot.kcal > 0) {
-      const pctK = t.ready ? Math.min(100, Math.round((tot.kcal / t.kcal) * 100)) : 0;
-      const pctP = t.ready ? Math.min(100, Math.round((tot.protein / t.protein) * 100)) : 0;
-      root.append(h('div.card.tappable.food-tile.row-card', { onclick: () => navigate('/food') }, [
-        h('div.row', {}, [
-          iconBox('food'),
-          h('div.grow', {}, [
-            h('b', { text: 'Essen heute' }),
-            h('div.small.muted', { text: t.ready ? `${fmtKcal(tot.kcal)} / ${fmtKcal(t.kcal)} kcal · Protein ${Math.round(tot.protein)} / ${t.protein} g` : `${fmtKcal(tot.kcal)} kcal · ${Math.round(tot.protein)} g Protein` }),
-            t.ready ? h('div.mini-bars', {}, [h('span.track', {}, [h('i.k', { style: { width: pctK + '%' } })]), h('span.track', {}, [h('i.p', { style: { width: pctP + '%' } })])]) : null,
-          ]),
-          h('div', { html: svgIcon.chevron }),
-        ]),
-      ]));
-    }
-  }
 
   // Muskelgruppen-Karte
   const ms = muscleSets(weekSessions);
@@ -274,18 +254,103 @@ function renderOverview(root, { navigate }) {
     ]),
   ]));
 
-  // Trainingskalender
-  root.append(h('div.subhead', {}, [h('h2', { text: 'Trainingskalender' })]));
-  // Kalender wächst mit den Daten: mindestens 8, höchstens 20 Wochen
+  // Rekorde: eigene Seite, hier nur der Einstieg
+  const idx = exerciseIndex();
+  const lastPR = latestPR(sessions);
+  root.append(h('div.card.tappable.row-card', { onclick: () => navigate('/records') }, [
+    h('div.row', {}, [
+      iconBox('medal', 'good'),
+      h('div.grow', {}, [
+        h('b', { text: 'Rekorde' }),
+        h('div.small.faint', { text: lastPR ? `Zuletzt: ${lastPR.name} · ${fmtPR(lastPR, settings)} · ${fmtShortDate(lastPR.date)}` : `${idx.length} Übungen mit Bestwerten` }),
+      ]),
+      h('div', { html: svgIcon.chevron }),
+    ]),
+  ]));
+
+  // Kalender und Wochen-Chart teilen sich eine Karte – Pfeile blättern
+  root.append(h('div.subhead', {}, [h('h2', { text: 'Verlauf' })]));
   const firstWeek = weekKey(sessions.reduce((a, s) => Math.min(a, s.startedAt), Infinity));
   const spanWeeks = Math.round((weekKey(Date.now()) - firstWeek) / (7 * 86400000)) + 1;
-  root.append(h('div.card', {}, [heatmap(sessions, Math.min(20, Math.max(8, spanWeeks)), navigate)]));
+  root.append(carousel([
+    { title: 'Trainingskalender', make: () => heatmap(sessions, Math.min(20, Math.max(8, spanWeeks)), navigate) },
+    { title: 'Workouts pro Woche', make: () => weeklyBarChart(sessions, 12, chartWidth(root)) },
+  ]));
 
-  root.append(h('div.subhead', {}, [h('h2', { text: 'Workouts pro Woche' })]));
-  root.append(h('div.card', {}, [weeklyBarChart(sessions, 12, chartWidth(root))]));
+  // Letzte Workouts, auf Wunsch alle
+  const all = [...sessions].reverse();
+  const list = h('div.list.mt');
+  const drawList = (n) => {
+    list.innerHTML = '';
+    for (const s of all.slice(0, n)) list.append(sessionRow(s, settings, navigate));
+    if (all.length > n) list.append(h('button.btn.ghost.block', { text: `Alle ${all.length} Workouts anzeigen`, onclick: () => drawList(all.length) }));
+  };
+  drawList(6);
+  root.append(list);
+}
 
+/** Karte mit mehreren Ansichten: Titel + ‹ › blättern, Punkte zeigen die Position */
+function carousel(panels) {
+  let i = 0;
+  const title = h('b', { text: panels[0].title });
+  const body = h('div.carousel-body');
+  const dots = h('div.carousel-dots', {}, panels.map((_, k) => h('i', { class: k === 0 ? 'on' : '' })));
+  const show = (k) => {
+    i = (k + panels.length) % panels.length;
+    title.textContent = panels[i].title;
+    body.innerHTML = ''; body.append(panels[i].make());
+    [...dots.children].forEach((d, k2) => d.classList.toggle('on', k2 === i));
+  };
+  show(0);
+  return h('div.card.carousel', {}, [
+    h('div.row.between.carousel-head', {}, [
+      title,
+      h('div.row', { style: { gap: '4px' } }, [
+        h('button.btn.icon.ghost.sm', { 'aria-label': 'Zurück', text: '‹', onclick: () => show(i - 1) }),
+        h('button.btn.icon.ghost.sm', { 'aria-label': 'Weiter', text: '›', onclick: () => show(i + 1) }),
+      ]),
+    ]),
+    body, dots,
+  ]);
+}
+
+/** Jüngster Rekord über die letzten Sessions */
+function latestPR(sessions) {
+  for (let k = sessions.length - 1; k >= Math.max(0, sessions.length - 8); k--) {
+    const prs = sessionPRs(sessions[k]);
+    if (prs.length) return { ...prs[0], date: sessions[k].startedAt };
+  }
+  return null;
+}
+function fmtPR(p, settings) {
+  return p.type === 'volume' ? `${fmtNum(p.value)} ${settings.unit}` : p.type === 'e1rm' ? `${fmtKg(Math.round(p.value))} 1RM` : `${fmtKg(p.weight)} × ${p.reps}`;
+}
+
+// ---------- Rekorde ----------
+
+function renderRecords(root, { navigate }) {
+  const settings = getSettings();
+  const sessions = getSessions();
+  root.append(h('button.back', { html: svgIcon.back + '<span>Fortschritt</span>', onclick: () => navigate('/progress') }));
   const idx = exerciseIndex();
-  root.append(h('div.subhead', {}, [h('h2', { text: 'Übungen & Rekorde' })]));
+  root.append(h('div.page-head', {}, [h('div', {}, [h('div.eyebrow', { text: `${idx.length} Übungen` }), h('h1', { text: 'Rekorde' })])]));
+  if (!idx.length) { root.append(h('div.card', {}, [h('p.small.muted', { text: 'Sobald du trainierst, stehen hier deine Bestwerte je Übung.' })])); return; }
+
+  // Jüngste Rekorde (letzte 8 Sessions)
+  const recent = [];
+  for (let k = sessions.length - 1; k >= Math.max(0, sessions.length - 8); k--) for (const p of sessionPRs(sessions[k])) recent.push({ ...p, date: sessions[k].startedAt });
+  if (recent.length) {
+    root.append(h('div.subhead', {}, [h('h2', { text: 'Zuletzt aufgestellt' })]));
+    const rc = h('div.card');
+    for (const p of recent.slice(0, 8)) rc.append(h('div.pr-row', { onclick: () => navigate('/exercise/' + encodeURIComponent(p.name)), style: { cursor: 'pointer' } }, [
+      iconBox('trophy', 'good'),
+      h('div.grow', {}, [h('div', { text: p.name, style: { fontWeight: 600 } }), h('div.sub', { text: `${PR_LABELS[p.type]} · ${fmtShortDate(p.date)}` })]),
+      h('div.val', { text: fmtPR(p, settings) }),
+    ]));
+    root.append(rc);
+  }
+
+  root.append(h('div.subhead', {}, [h('h2', { text: 'Bestwerte je Übung' })]));
   const exCard = h('div.card');
   for (const e of idx) {
     exCard.append(h('div.pr-row', { onclick: () => navigate('/exercise/' + encodeURIComponent(e.name)), style: { cursor: 'pointer' } }, [
@@ -298,11 +363,6 @@ function renderOverview(root, { navigate }) {
     ]));
   }
   root.append(exCard);
-
-  root.append(h('div.subhead', {}, [h('h2', { text: 'Verlauf' })]));
-  const list = h('div.list');
-  for (const s of [...sessions].reverse()) list.append(sessionRow(s, settings, navigate));
-  root.append(list);
 }
 
 /** Chart-Breite in CSS-Pixeln (Container minus Card-/View-Padding), damit Text nicht skaliert */

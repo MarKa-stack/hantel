@@ -2,7 +2,7 @@
 // „Als Nächstes“-Karte und die Pläne – jeweils mit Bild (eigenes Foto oder Körperkarte in Planfarbe). Rest unter „Fortschritt“.
 import { h, svgIcon, toast, actionSheet, confirmSheet, promptSheet, relativeDay, illustration, weekKey, isoWeek } from '../util.js';
 import { getPlans, addPlan, newPlan, deletePlan, duplicatePlan, movePlan, getSessions, getActiveWorkout, subscribe, getSettings } from '../store.js';
-import { muscleSets, bodyMapSvg } from '../muscles.js';
+import { planArtSvg } from '../plan-art.js';
 import { suggestPlan } from '../recovery.js';
 
 let unsub = null;
@@ -43,7 +43,7 @@ export function render(root, { navigate }) {
       const last = [...sessions].reverse().find(s => s.planId === p.id);
       const deload = settings.deloadUntil && settings.deloadUntil > Date.now();
       root.append(h('div.card.tappable.plan-card.art.hero-card' + (p.image ? '.has-photo' : ''), { style: `--pc:${colorFor(p)}`, onclick: () => navigate('/plan/' + p.id) }, [
-        planArt(p),
+        planArt(p, true),
         h('div.plan-body', {}, [
           h('div.plan-flag', { text: deload ? 'Als Nächstes · Deload' : 'Als Nächstes' }),
           h('h2', { text: p.name }),
@@ -161,15 +161,10 @@ function planCard(p, sessions, navigate) {
   ]);
 }
 
-/** Hintergrund der Plan-Karte: Foto oder Körperkarte (Seite mit den meisten getroffenen Muskeln) */
-function planArt(plan) {
+/** Hintergrund der Plan-Karte: eigenes Foto oder Illustration (Farbverlauf + Gerät) in Planfarbe */
+function planArt(plan, tall = false) {
   if (plan.image) return h('div.art.photo', { style: { backgroundImage: `url("${plan.image}")` } });
-  const fake = { entries: plan.exercises.map(e => ({ name: e.name, sets: Array.from({ length: Math.max(1, e.sets || 1) }, () => ({ done: true })) })) };
-  const ms = muscleSets([fake]);
-  const upper = ['chest', 'back', 'front_delt', 'side_delt', 'rear_delt', 'biceps', 'triceps'].reduce((a, k) => a + ms.totals[k], 0);
-  const lower = ['quads', 'hamstrings', 'glutes', 'calves'].reduce((a, k) => a + ms.totals[k], 0);
-  const side = lower > upper ? 'front' : (ms.totals.back > ms.totals.chest ? 'back' : 'front');
-  return h('div.art', { html: bodyMapSvg(side, ms.totals, { mode: 'week', still: true, mono: true, color: 'var(--pc)' }) });
+  return h('div.art', { html: planArtSvg(plan, colorFor(plan), { tall }) });
 }
 
 // „Heute“/„Gestern“ klein im Satz, Datumsangaben unverändert
