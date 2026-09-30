@@ -72,7 +72,7 @@ const state = {
   body: [],             // Körpergewicht/Maße: { id, date, weight, waist, chest, arm, thigh, note }
   customExercises: [],  // eigene Übungen: { id, name, primary, secondary, weightStep, barbell, tips, aliases }
   foods: [],            // Lebensmittel: { id, name, brand, source, per100:{kcal,protein,carbs,fat}, unit, portions:[{label,grams}], barcode, favorite, uses, lastUsed }
-  recipes: [],          // Rezepte: { id, name, servings, items:[{ foodId, name, grams, per100, note }], note, variations:[{ id, at, text }], source, sourceUrl, sourceNutrition, useSourceNutrition }
+  recipes: [],          // Rezepte: { id, name, servings, cookedGrams, items:[{ foodId, name, grams, per100, note }], note, variations:[{ id, at, text }], source, sourceUrl, sourceNutrition, useSourceNutrition }
   diary: {},            // Tagebuch: { "YYYY-MM-DD": [{ id, meal, kind, refId, name, grams, servings, kcal, protein, carbs, fat, at, source }] }
   aiMeals: [],          // „Zuletzt analysiert“ (Foto-Schätzungen, ohne Bild): { id, at, mealName, confidence, items, totals }
   pantry: [],           // Vorrat für den Rezeptgenerator: { name, addedAt, expiresAt? }

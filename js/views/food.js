@@ -85,7 +85,7 @@ function renderDay(root, { navigate, query }) {
         body.append(h('div.food-row', { onclick: () => openEntrySheet(curKey, e, draw) }, [
           h('div.grow', {}, [
             h('div.clamp2', { html: escapeHtml(e.name) + (e.source === 'ai_image' ? ' <span class="pill accent sm">KI-Schätzung</span>' : ''), style: { fontWeight: 600 } }),
-            h('div.small.faint', { text: (e.kind === 'recipe' ? `${String(e.servings).replace('.', ',')} Portion${e.servings === 1 ? '' : 'en'} · ` : `${e.grams} g · `) + `${fmtG(e.protein)} g P · ${fmtG(e.carbs)} g KH · ${fmtG(e.fat)} g F` }),
+            h('div.small.faint', { text: (e.kind === 'recipe' && !e.byGrams ? `${String(e.servings).replace('.', ',')} Portion${e.servings === 1 ? '' : 'en'} · ` : `${e.grams} g · `) + `${fmtG(e.protein)} g P · ${fmtG(e.carbs)} g KH · ${fmtG(e.fat)} g F` }),
           ]),
           h('div.kcal', { text: fmtKcal(e.kcal) }),
         ]));
@@ -206,8 +206,8 @@ export function openAddSheet(meal, dayKey, onDone, opts = {}) {
       } });
     };
     const pickRecipe = (recipe, presetServings) => {
-      openServingsSheet(recipe, { servings: presetServings, meal: meal || 'lunch', onCommit: (servings, mealSel) => {
-        addDiaryEntry(dayKey, recipeEntry(recipe, servings, mealSel));
+      openServingsSheet(recipe, { servings: presetServings, meal: meal || 'lunch', onCommit: (servings, mealSel, _day, grams) => {
+        addDiaryEntry(dayKey, recipeEntry(recipe, servings, mealSel, grams));
         close(); toast(`${recipe.name} eingetragen`); onDone?.();
       } });
     };
@@ -354,30 +354,60 @@ function openPortionSheet(food, { grams, meal, onCommit, onDelete = null, title 
   });
 }
 
-export function openServingsSheet(recipe, { servings, meal, onCommit, onDelete = null, title = 'Hinzufügen', dayPick = false }) {
+export function openServingsSheet(recipe, { servings, meal, onCommit, onDelete = null, title = 'Hinzufügen', dayPick = false, grams = null }) {
   openSheet((sheet, close) => {
     let n = servings || 1;
     let mealSel = meal;
     let daySel = dateKey();
     const t = recipeTotals(recipe);
+    // Zwei Wege: ganze Portionen oder abgewogene Gramm (z.B. „350 g Chili con carne“)
+    let mode = grams > 0 ? 'g' : 'portion';
+    let g = grams > 0 ? Math.round(grams) : Math.max(1, t.gramsPerServing);
     // Tag wählen (Heute / Gestern) – z.B. für generierte Rezepte
     const daySeg = dayPick ? h('div.seg.mt', {}, [[dateKey(), 'Heute'], [dateKey(Date.now() - 86400000), 'Gestern']].map(([k, l]) => h('button', { text: l, class: daySel === k ? 'active' : '', onclick: (e) => { daySel = k; for (const b of e.target.parentNode.children) b.classList.toggle('active', b === e.target); } }))) : null;
     const input = h('input.input.num', { type: 'text', inputmode: 'decimal', value: String(n).replace('.', ','), style: { fontSize: '26px', minHeight: '56px' } });
+    const unitLabel = h('small', { text: 'Portionen' });
     const live = h('div.macro-live');
-    const update = () => { live.innerHTML = `<b>${fmtKcal(t.perServing.kcal * n)} kcal</b> · ${fmtG(t.perServing.protein * n)} g P · ${fmtG(t.perServing.carbs * n)} g KH · ${fmtG(t.perServing.fat * n)} g F · ≈ ${Math.round(t.gramsPerServing * n)} g`; };
-    const set = (v) => { n = Math.max(0.25, Math.round(v * 4) / 4); input.value = String(n).replace('.', ','); update(); };
-    input.addEventListener('input', () => { const v = parseNum(input.value); if (v > 0) { n = v; update(); } });
+    const update = () => {
+      const m = mode === 'g' ? macros(t.per100, g) : { kcal: t.perServing.kcal * n, protein: t.perServing.protein * n, carbs: t.perServing.carbs * n, fat: t.perServing.fat * n };
+      const tail = mode === 'g'
+        ? (t.gramsPerServing ? (() => { const p = Math.round(g / t.gramsPerServing * 10) / 10; return ` · ≈ ${String(p).replace('.', ',')} Portion${p === 1 ? '' : 'en'}`; })() : '')
+        : ` · ≈ ${Math.round(t.gramsPerServing * n)} g`;
+      live.innerHTML = `<b>${fmtKcal(m.kcal)} kcal</b> · ${fmtG(m.protein)} g P · ${fmtG(m.carbs)} g KH · ${fmtG(m.fat)} g F${tail}`;
+    };
+    const set = (v) => {
+      if (mode === 'g') { g = Math.max(1, Math.round(v)); input.value = String(g); }
+      else { n = Math.max(0.25, Math.round(v * 4) / 4); input.value = String(n).replace('.', ','); }
+      update();
+    };
+    input.addEventListener('input', () => { const v = parseNum(input.value); if (v > 0) { if (mode === 'g') g = Math.round(v); else n = v; update(); } });
+    const modeSeg = h('div.seg', {}, [['portion', 'Portionen'], ['g', 'Gramm']].map(([k, l]) => h('button', { text: l, class: mode === k ? 'active' : '', onclick: (e) => {
+      if (mode === k) return;
+      // Menge übernehmen: aus Portionen werden Gramm und umgekehrt
+      if (k === 'g') g = Math.max(1, Math.round(t.gramsPerServing * n)); else n = t.gramsPerServing ? Math.max(0.25, Math.round(g / t.gramsPerServing * 4) / 4) : 1;
+      mode = k;
+      for (const b of e.target.parentNode.children) b.classList.toggle('active', b === e.target);
+      unitLabel.textContent = mode === 'g' ? 'Gramm' : 'Portionen';
+      input.value = mode === 'g' ? String(g) : String(n).replace('.', ',');
+      update();
+    } })));
+    if (mode === 'g') { unitLabel.textContent = 'Gramm'; input.value = String(g); }
     const mealSeg = meal ? h('div.seg', {}, MEALS.map(([k, l]) => h('button', { text: l, class: mealSel === k ? 'active' : '', onclick: (e) => { mealSel = k; for (const b of e.target.parentNode.children) b.classList.toggle('active', b === e.target); } }))) : null;
     sheet.append(
       h('h2', { text: recipe.name, style: { marginBottom: '2px' } }),
-      h('p.small.faint', { text: `pro Portion: ${fmtKcal(t.perServing.kcal)} kcal · ${fmtG(t.perServing.protein)} g P · ${t.gramsPerServing} g` }),
-      h('div.stepper.mt', {}, [h('button', { text: '−', onclick: () => set(n - 0.5) }), h('div.val', {}, [input, h('small', { text: 'Portionen' })]), h('button', { text: '+', onclick: () => set(n + 0.5) })]),
+      h('p.small.faint', { text: `pro Portion: ${fmtKcal(t.perServing.kcal)} kcal · ${fmtG(t.perServing.protein)} g P · ${t.gramsPerServing} g` + (t.per100.kcal ? ` · 100 g: ${fmtKcal(t.per100.kcal)} kcal` : '') }),
+      h('div.mt', {}, [modeSeg]),
+      h('div.stepper.mt', {}, [
+        h('button', { text: '−', onclick: () => set(mode === 'g' ? g - 10 : n - 0.5) }),
+        h('div.val', {}, [input, unitLabel]),
+        h('button', { text: '+', onclick: () => set(mode === 'g' ? g + 10 : n + 0.5) }),
+      ]),
       h('div.mt', {}, [live]),
       mealSeg ? h('div.mt', {}, [mealSeg]) : null,
       daySeg,
       h('div.actions', {}, [
         onDelete ? h('button.btn.danger', { text: 'Löschen', onclick: () => { close(); onDelete(); } }) : h('button.btn.ghost', { text: 'Abbrechen', onclick: close }),
-        h('button.btn.primary', { text: title, onclick: () => { close(); onCommit(n, mealSel, daySel); } }),
+        h('button.btn.primary', { text: title, onclick: () => { close(); onCommit(n, mealSel, daySel, mode === 'g' ? g : null); } }),
       ]),
     );
     update();
@@ -390,7 +420,7 @@ function openEntrySheet(dayKey, e, onDone) {
   if (e.kind === 'recipe') {
     const r = getRecipe(e.refId);
     if (!r) { actionSheet(e.name, [{ label: 'Eintrag löschen', danger: true, fn: del }]); return; }
-    openServingsSheet(r, { servings: e.servings, meal: e.meal, title: 'Speichern', onDelete: del, onCommit: (n, meal) => { updateDiaryEntry(dayKey, e.id, { ...recipeEntry(r, n, meal), id: e.id }); onDone?.(); } });
+    openServingsSheet(r, { servings: e.servings, grams: e.byGrams ? e.grams : null, meal: e.meal, title: 'Speichern', onDelete: del, onCommit: (n, meal, _day, grams) => { updateDiaryEntry(dayKey, e.id, { ...recipeEntry(r, n, meal, grams), id: e.id }); onDone?.(); } });
     return;
   }
   const f = findFood(e.refId) || { id: e.refId, name: e.name, per100: { kcal: e.kcal / e.grams * 100, protein: e.protein / e.grams * 100, carbs: e.carbs / e.grams * 100, fat: e.fat / e.grams * 100 }, unit: 'g', portions: [] };
@@ -669,6 +699,13 @@ function renderRecipeEditor(root, { params, navigate }) {
   serv.addEventListener('input', () => { d.servings = Math.max(1, parseInt(serv.value, 10) || 1); drawTotals(); });
   root.append(h('div.field', {}, [h('label', { text: 'Name' }), name]));
   root.append(h('div.row.between.mt', {}, [h('label.small.muted', { text: 'Portionen' }), serv]));
+  // Fertiges Gewicht: nur nötig, wenn man Portionen abwiegen will (beim Kochen verdampft Wasser)
+  const cooked = h('input.input.num', { type: 'text', inputmode: 'numeric', value: d.cookedGrams ? String(d.cookedGrams) : '', placeholder: '–', style: { width: '90px' } });
+  cooked.addEventListener('input', () => { const v = parseNum(cooked.value); d.cookedGrams = v > 0 ? Math.round(v) : null; drawTotals(); });
+  root.append(h('div.row.between.mt', {}, [
+    h('div.grow', {}, [h('div.small.muted', { text: 'Fertiges Gewicht (g)' }), h('div.small.faint', { text: 'Optional: fertiges Gericht abwiegen – dann stimmen Gramm-Einträge' })]),
+    cooked,
+  ]));
 
   // Herkunft (Cookidoo & Co.): Link aufs Original und die offiziellen Nährwerte
   if (d.sourceUrl || d.sourceNutrition) {
@@ -736,13 +773,13 @@ function renderRecipeEditor(root, { params, navigate }) {
     const t = recipeTotals(d);
     totals.innerHTML = '';
     totals.append(
-      h('div.small.faint', { text: `Gesamt ${t.grams} g · ${fmtKcal(t.total.kcal)} kcal` }),
+      h('div.small.faint', { text: t.cooked ? `Zutaten ${t.rawGrams} g · fertig ${t.grams} g · ${fmtKcal(t.total.kcal)} kcal` : `Gesamt ${t.grams} g · ${fmtKcal(t.total.kcal)} kcal` }),
       h('div.stats.cols-3.mt', {}, [
         h('div.stat', {}, [h('div.val', { html: `${fmtKcal(t.perServing.kcal)}<small>kcal</small>` }), h('div.lbl', { text: 'pro Portion' })]),
         h('div.stat', {}, [h('div.val', { html: `${fmtG(t.perServing.protein)}<small>g</small>` }), h('div.lbl', { text: 'Protein' })]),
         h('div.stat', {}, [h('div.val', { html: `${t.gramsPerServing}<small>g</small>` }), h('div.lbl', { text: 'Gewicht' })]),
       ]),
-      h('p.small.faint.mt', { text: `pro Portion: ${fmtG(t.perServing.carbs)} g KH · ${fmtG(t.perServing.fat)} g Fett · pro 100 g: ${fmtKcal(t.per100.kcal)} kcal` }),
+      h('p.small.faint.mt', { text: `pro Portion: ${fmtG(t.perServing.carbs)} g KH · ${fmtG(t.perServing.fat)} g Fett · pro 100 g: ${fmtKcal(t.per100.kcal)} kcal · ${fmtG(t.per100.protein)} g P` }),
     );
   };
   drawList();
@@ -783,7 +820,7 @@ function renderRecipeEditor(root, { params, navigate }) {
   };
   root.append(h('div.stack.mt-lg', {}, [
     h('button.btn.primary.block', { text: 'Speichern', onclick: () => { const r = saveIt(); if (r) { toast('Rezept gespeichert'); navigate('/food/recipes'); } } }),
-    h('button.btn.good.block', { text: 'Speichern und ins Tagebuch', onclick: () => { const r = saveIt(); if (!r) return; openServingsSheet(r, { servings: 1, meal: 'lunch', onCommit: (n, meal) => { addDiaryEntry(dateKey(), recipeEntry(r, n, meal)); toast('Eingetragen'); navigate('/food'); } }); } }),
+    h('button.btn.good.block', { text: 'Speichern und ins Tagebuch', onclick: () => { const r = saveIt(); if (!r) return; openServingsSheet(r, { servings: 1, meal: 'lunch', onCommit: (n, meal, _day, grams) => { addDiaryEntry(dateKey(), recipeEntry(r, n, meal, grams)); toast('Eingetragen'); navigate('/food'); } }); } }),
     !isNew ? h('button.btn.danger.block', { text: 'Rezept löschen', onclick: async () => { if (await confirmSheet({ title: `„${d.name}“ löschen?`, okLabel: 'Löschen', danger: true })) { deleteRecipe(d.id); toast('Gelöscht'); navigate('/food/recipes'); } } }) : null,
   ]));
 }

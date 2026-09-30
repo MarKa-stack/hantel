@@ -28,7 +28,11 @@ export function sumMacros(list) {
 // ---------- Rezepte ----------
 
 export function recipeTotals(recipe) {
-  const grams = recipe.items.reduce((a, it) => a + (Number(it.grams) || 0), 0);
+  const rawGrams = recipe.items.reduce((a, it) => a + (Number(it.grams) || 0), 0);
+  // „Fertiges Gewicht“ (abgewogener Topfinhalt) zählt für Gramm-Einträge: beim Kochen verdampft Wasser,
+  // die Nährwerte bleiben gleich – 100 g fertiges Chili haben also mehr kcal als 100 g Zutaten.
+  const cooked = Number(recipe.cookedGrams) || 0;
+  const grams = cooked > 0 ? cooked : rawGrams;
   let total = sumMacros(recipe.items.map(it => macros(it.per100, it.grams)));
   const servings = Math.max(1, Number(recipe.servings) || 1);
   // Offizielle Nährwerte der Quelle (z.B. Cookidoo) haben Vorrang vor der Schätzung aus den Zutaten
@@ -36,7 +40,7 @@ export function recipeTotals(recipe) {
   if (src) total = { kcal: (Number(src.kcal) || 0) * servings, protein: (Number(src.protein) || 0) * servings, carbs: (Number(src.carbs) || 0) * servings, fat: (Number(src.fat) || 0) * servings };
   const perServing = { kcal: Math.round(total.kcal / servings), protein: r1(total.protein / servings), carbs: r1(total.carbs / servings), fat: r1(total.fat / servings) };
   const per100 = grams ? { kcal: Math.round(total.kcal / grams * 100), protein: r1(total.protein / grams * 100), carbs: r1(total.carbs / grams * 100), fat: r1(total.fat / grams * 100) } : { kcal: 0, protein: 0, carbs: 0, fat: 0 };
-  return { grams, total, perServing, per100, servings, gramsPerServing: Math.round(grams / servings) };
+  return { grams, rawGrams, cooked: cooked > 0, total, perServing, per100, servings, gramsPerServing: Math.round(grams / servings) };
 }
 
 // ---------- Suche (lokal) ----------
@@ -109,8 +113,14 @@ export function foodEntry(food, grams, meal) {
   return { meal, kind: 'food', refId: food.id, name: food.name + (food.brand ? ` (${food.brand})` : ''), grams: Number(grams), ...m };
 }
 
-export function recipeEntry(recipe, servings, meal) {
+export function recipeEntry(recipe, servings, meal, grams = null) {
   const t = recipeTotals(recipe);
+  // Abgewogen: Menge in Gramm, Nährwerte über die Werte pro 100 g des fertigen Gerichts
+  if (grams > 0) {
+    const g = Math.round(grams);
+    const m = macros(t.per100, g);
+    return { meal, kind: 'recipe', refId: recipe.id, name: recipe.name, byGrams: true, servings: t.gramsPerServing ? Math.round(g / t.gramsPerServing * 100) / 100 : 1, grams: g, ...m };
+  }
   const f = Number(servings) || 1;
   return { meal, kind: 'recipe', refId: recipe.id, name: recipe.name, servings: f, grams: Math.round(t.gramsPerServing * f), kcal: Math.round(t.perServing.kcal * f), protein: r1(t.perServing.protein * f), carbs: r1(t.perServing.carbs * f), fat: r1(t.perServing.fat * f) };
 }

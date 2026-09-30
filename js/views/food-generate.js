@@ -132,7 +132,7 @@ export function render(root, { navigate }) {
         h('button.btn.ghost', { text: 'Rezept speichern', onclick: () => { const rec = persist(r); toast(`„${rec.name}“ unter Rezepte gespeichert`); navigate('/food/recipe/' + rec.id); } }),
         h('button.btn.good', { text: 'Als Mahlzeit eintragen', onclick: () => {
           const rec = toRecipe(r);
-          openServingsSheet(rec, { servings: 1, meal: 'dinner', dayPick: true, onCommit: (n2, meal, key) => { const saved = persist(r); addDiaryEntry(key, recipeEntry(saved, n2, meal)); toast('Eingetragen'); navigate('/food?d=' + key); } });
+          openServingsSheet(rec, { servings: 1, meal: 'dinner', dayPick: true, onCommit: (n2, meal, key, grams) => { const saved = persist(r); addDiaryEntry(key, recipeEntry(saved, n2, meal, grams)); toast('Eingetragen'); navigate('/food?d=' + key); } });
         } }),
       ]),
     ]);
