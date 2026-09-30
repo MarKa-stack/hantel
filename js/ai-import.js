@@ -20,3 +20,16 @@ export async function aiExtractPlans(file) {
   const { data } = await runTask('pdf-plans', { pdf: base64, name: file.name });
   return data;
 }
+
+/**
+ * Trainingsplan aus reinem Text (Apple Notizen, Chat, Tabelle). Prompt/Schema in ai-tasks.js ('text-plans').
+ * @param {string} text
+ * @returns {Promise<{plans:Array}>}
+ */
+export async function aiExtractPlansFromText(text) {
+  const t = String(text || '').trim();
+  if (t.length < 10) throw new Error('Der Text ist zu kurz.');
+  if (t.length > 20000) throw new Error('Der Text ist zu lang (max. 20.000 Zeichen).');
+  const { data } = await runTask('text-plans', { text: t });
+  return data;
+}

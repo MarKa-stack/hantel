@@ -7,7 +7,7 @@ import { aiParseFood } from '../ai-food.js';
 import { openScanner, scannerAvailable } from '../scanner.js';
 import { aiReady } from '../llm.js';
 import { openPhotoSheet } from './food-photo.js';
-import { fetchCookidoo, ingredientsToItems, toRecipeDraft, parseYield, cookidooUrl, cookidooReady } from '../cookidoo.js';
+
 
 let curKey = dateKey();
 let unsub = null;
@@ -598,7 +598,7 @@ function renderRecipes(root, { navigate }) {
     h('button.btn.ai-btn', { html: svgIcon.doc + '<span>Frei beschreiben</span>', onclick: () => openAiSheet({ recipeMode: true, onRecipe: (r) => navigate('/food/recipe/' + r.id) }) }),
   ]));
   // Thermomix: Rezept aus Cookidoo übernehmen
-  root.append(h('button.btn.ai-btn.block.mb', { html: svgIcon.link + '<span>Cookidoo-Rezept importieren</span>', onclick: () => openCookidooSheet((r) => navigate('/food/recipe/' + r.id)) }));
+  root.append(h('button.btn.ai-btn.block.mb', { html: svgIcon.link + '<span>Aus Cookidoo oder Fddb übernehmen</span>', onclick: () => navigate('/food/import') }));
   const list = getRecipes();
   if (!list.length) { root.append(h('div.card', {}, [h('p.small.muted', { text: 'Noch keine Rezepte. Oben per KI aus deinen Zutaten erstellen lassen, in einem Satz beschreiben oder mit „+“ Zutat für Zutat anlegen. Ein Rezept trägst du danach mit zwei Tipps als Portion ein.' })])); return; }
   // Liste eingeklappt hinter einem Reiter – die Seite bleibt ruhig, bis man sie braucht
@@ -615,74 +615,6 @@ function renderRecipes(root, { navigate }) {
   }
   const tab = h('button.btn.ghost.block.tab-toggle', { html: `<span>Meine Rezepte (${list.length})</span>` + svgIcon.chevron, onclick: () => { card.hidden = !card.hidden; tab.classList.toggle('open', !card.hidden); } });
   root.append(tab, card);
-}
-
-
-// ---------- Cookidoo-Import (Thermomix) ----------
-
-/** Link einfügen → öffentliche Rezeptdaten holen → Zutaten per KI in Gramm/Nährwerte → Rezept anlegen */
-export function openCookidooSheet(onSaved) {
-  openSheet((sheet, close) => {
-    const linkIn = h('input.input', { type: 'url', inputmode: 'url', placeholder: 'https://cookidoo.de/recipes/recipe/de-DE/r…', autocapitalize: 'off', spellcheck: false });
-    const manual = h('textarea.input', { rows: 6, placeholder: 'Alternativ: Zutaten einfügen, eine je Zeile\n\n500 g Hähnchenbrust\n200 g Frischkäse\n1 TL Paprikapulver', style: { minHeight: '120px' } });
-    const nameIn = h('input.input', { type: 'text', placeholder: 'Rezeptname' });
-    const servIn = h('input.input.num', { type: 'text', inputmode: 'numeric', value: '4', style: { width: '90px' } });
-    const manualBox = h('div', { hidden: true }, [
-      h('div.field.mt', {}, [h('label', { text: 'Name' }), nameIn]),
-      h('div.row.between.mt', {}, [h('label.small.muted', { text: 'Portionen' }), servIn]),
-      h('div.field.mt', {}, [h('label', { text: 'Zutaten' }), manual]),
-    ]);
-    const toggle = h('button.btn.sm.ghost.block.mt', { text: 'Stattdessen Zutaten als Text einfügen', onclick: () => {
-      const on = manualBox.hidden;
-      manualBox.hidden = !on; linkBox.hidden = on;
-      toggle.textContent = on ? 'Doch einen Link einfügen' : 'Stattdessen Zutaten als Text einfügen';
-    } });
-    const linkBox = h('div', {}, [
-      h('div.field.mt', {}, [h('label', { text: 'Cookidoo-Link' }), linkIn]),
-      h('p.small.faint', { text: 'In der Cookidoo-App: Rezept öffnen → Teilen → Link kopieren. Übernommen werden Name, Zutaten, Portionen, Zeit und die Nährwerte von Cookidoo – die Zubereitungsschritte bleiben in Cookidoo, die App verlinkt darauf.' }),
-    ]);
-    const status = h('p.small.muted.mt');
-    const go = h('button.btn.primary.block.mt', { html: svgIcon.sparkle + '<span>Rezept holen</span>' });
-
-    go.addEventListener('click', async () => {
-      const useManual = !manualBox.hidden;
-      go.disabled = true; toggle.disabled = true;
-      const step = (t) => { status.textContent = t; };
-      try {
-        let ck, lines;
-        if (useManual) {
-          const nm = nameIn.value.trim();
-          lines = manual.value.split('\n').map(s => s.trim()).filter(Boolean);
-          if (!nm) throw new Error('Name fehlt.');
-          if (!lines.length) throw new Error('Keine Zutaten eingefügt.');
-          ck = { name: nm, url: cookidooUrl(manual.value) || null, ingredients: lines, yieldText: `${Math.max(1, parseInt(servIn.value, 10) || 1)} Portionen`, totalMinutes: null, perServing: null };
-        } else {
-          step('Rezept wird bei Cookidoo geholt …');
-          ck = await fetchCookidoo(linkIn.value);
-          lines = ck.ingredients;
-        }
-        const y = parseYield(ck.yieldText);
-        step(`„${ck.name}“ – ${lines.length} Zutaten. Mengen und Nährwerte werden berechnet …`);
-        const items = await ingredientsToItems(lines, { servings: y.servings, name: ck.name });
-        const draft = toRecipeDraft(ck, items);
-        if (useManual) { draft.source = ck.url ? 'cookidoo' : 'manuell'; draft.sourceUrl = ck.url; draft.sourceLabel = ck.url ? 'Cookidoo' : ''; }
-        const saved = saveRecipe(draft);
-        close();
-        toast('Rezept importiert – bitte Mengen prüfen', { duration: 5000 });
-        onSaved?.(saved);
-      } catch (e) {
-        status.textContent = '';
-        toast(e.message || 'Import fehlgeschlagen', { duration: 7000 });
-        go.disabled = false; toggle.disabled = false;
-      }
-    });
-
-    sheet.append(
-      h('h3', { text: 'Cookidoo-Rezept importieren' }),
-      linkBox, manualBox, toggle, status, go,
-      !aiReady() ? h('p.small.muted.mt', { text: 'Für die Nährwerte braucht es einen KI-Zugang (Mehr → KI).' }) : null,
-    );
-  });
 }
 
 function renderRecipeEditor(root, { params, navigate }) {

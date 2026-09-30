@@ -1556,3 +1556,8 @@ details.credits a { color: var(--text-2); }
 .var-row:first-child { border-top: 0; padding-top: 2px; }
 .var-row .min0 { min-width: 0; overflow-wrap: anywhere; }
 .pill.sm { font-size: 10px; padding: 1px 6px; vertical-align: 2px; }
+
+/* ---------- Rezept-Import: Auswahlliste (1.28) ---------- */
+.pick-row { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }
+.pick-row:first-child { border-top: 0; }
+.pick-row .min0 { min-width: 0; }

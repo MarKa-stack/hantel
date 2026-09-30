@@ -1,25 +1,83 @@
-// PDF-Import: Datei wählen → erkennen (Muster oder KI) → prüfen → speichern
+// Plan-Import: PDF oder Text (z.B. aus Apple Notizen) → erkennen (Muster oder KI) → prüfen → speichern
 import { h, svgIcon, toast, parseNum } from '../util.js';
 import { addPlan, newPlan, newExercise, getSettings } from '../store.js';
 import { extractLines, parsePlanText } from '../pdf-import.js';
-import { aiExtractPlans } from '../ai-import.js';
+import { aiExtractPlans, aiExtractPlansFromText } from '../ai-import.js';
 import { aiReady, aiConfig } from '../llm.js';
 
 let mode = 'pattern';
+let source = 'pdf'; // 'pdf' | 'text'
 
-export function render(root, { navigate }) {
+export function render(root, { navigate, query }) {
   const settings = getSettings();
   if (mode === 'ai' && !aiReady()) mode = 'pattern';
+  if (query?.get('text')) source = 'text';
 
   root.append(h('button.back', { html: svgIcon.back + '<span>Pläne</span>', onclick: () => navigate('/plans') }));
-  root.append(h('div.page-head', {}, [h('div', {}, [h('div.eyebrow', { text: 'Import' }), h('h1', { text: 'Trainingsplan aus PDF' })])]));
+  const headline = h('h1', { text: 'Trainingsplan importieren' });
+  root.append(h('div.page-head', {}, [h('div', {}, [h('div.eyebrow', { text: 'Import' }), headline])]));
 
   const body = h('div');
-  root.append(body);
+  const srcSeg = h('div.seg', {}, [
+    h('button', { text: 'PDF', class: source === 'pdf' ? 'active' : '', onclick: () => { source = 'pdf'; drawPicker(); } }),
+    h('button', { text: 'Text / Notizen', class: source === 'text' ? 'active' : '', onclick: () => { source = 'text'; drawPicker(); } }),
+  ]);
+  root.append(srcSeg, body);
+
+  // ---------- Text aus Notizen ----------
+  const drawText = () => {
+    body.innerHTML = '';
+    for (const b of srcSeg.children) b.classList.toggle('active', (b.textContent === 'PDF') === (source === 'pdf'));
+    const area = h('textarea.input.mt', { rows: 10, placeholder: 'Notiz einfügen, z.B.:\n\nTag A – Push\nBankdrücken 4 x 8 60 kg\nSchrägbank KH 3 x 10\nSeitheben 3 x 15\n\nTag B – Pull\nKlimmzüge 4 x 6\nRudern 3 x 10 50 kg', style: { minHeight: '220px', fontSize: '15px' } });
+    const run = (useAi) => {
+      const text = area.value.trim();
+      if (text.length < 10) { toast('Bitte den Text der Notiz einfügen'); return; }
+      handleText(text, useAi);
+    };
+    body.append(
+      area,
+      h('p.small.faint.mt', { text: 'In Apple Notizen: Notiz öffnen → gedrückt halten → Alles auswählen → Kopieren → hier einfügen. „Offline erkennen“ braucht keine KI und liest Zeilen wie „Bankdrücken 4 x 8 60 kg“; bei unübersichtlichen Notizen hilft die KI.' }),
+      h('div.stack.mt', {}, [
+        h('button.btn.primary.block', { text: 'Offline erkennen', onclick: () => run(false) }),
+        h('button.btn.ai-btn.block', { html: svgIcon.sparkle + '<span>Mit KI erkennen</span>', disabled: !aiReady(), onclick: () => run(true) }),
+      ]),
+    );
+  };
+
+  const handleText = async (text, useAi) => {
+    const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
+    const fallbackName = lines[0]?.slice(0, 60) || 'Importierter Plan';
+    if (!useAi) {
+      const result = parsePlanText(lines, fallbackName);
+      if (!result.plans.length && aiReady()) toast('Offline nichts erkannt – probier „Mit KI erkennen“', { duration: 6000 });
+      drawReview(result, lines, fallbackName);
+      return;
+    }
+    body.innerHTML = '';
+    const status = h('div.muted', { text: 'KI liest die Notiz … (5–30 s)' });
+    const bar = h('div.progress-line', {}, [h('i')]);
+    body.append(h('div.card', {}, [h('div.row', {}, [h('div.spinner'), status]), bar]));
+    bar.firstChild.style.width = '45%';
+    try {
+      const ai = await aiExtractPlansFromText(text);
+      bar.firstChild.style.width = '100%';
+      drawReview({ plans: ai.plans, unmatched: [] }, lines, fallbackName);
+    } catch (e) {
+      body.innerHTML = '';
+      body.append(h('div.card', { style: { borderColor: 'var(--danger)' } }, [
+        h('h3', { text: 'Import fehlgeschlagen' }),
+        h('p.muted.mt', { text: e.message || String(e) }),
+        h('button.btn.block.mt', { text: 'Nochmal versuchen', onclick: drawPicker }),
+      ]));
+    }
+  };
 
   // ---------- Schritt 1: Datei & Modus ----------
   const drawPicker = () => {
+    headline.textContent = source === 'pdf' ? 'Trainingsplan aus PDF' : 'Trainingsplan aus Text';
+    if (source === 'text') { drawText(); return; }
     body.innerHTML = '';
+    for (const b of srcSeg.children) b.classList.toggle('active', (b.textContent === 'PDF') === (source === 'pdf'));
     const seg = h('div.seg', {}, [
       h('button', { text: 'Mustererkennung', class: mode === 'pattern' ? 'active' : '', onclick: () => { mode = 'pattern'; drawPicker(); } }),
       h('button', { text: 'KI (Claude)', class: mode === 'ai' ? 'active' : '', onclick: () => {
@@ -102,7 +160,7 @@ export function render(root, { navigate }) {
         h('div.stack.mt', {}, [
           mode === 'pattern' && aiReady() ? h('button.btn.primary.block', { text: 'Mit KI erneut versuchen', onclick: () => { mode = 'ai'; drawPicker(); } }) : null,
           mode === 'pattern' && !aiReady() ? h('button.btn.ghost.block', { text: 'KI-Import einrichten', onclick: () => navigate('/settings') }) : null,
-          h('button.btn.ghost.block', { text: 'Andere Datei wählen', onclick: drawPicker }),
+          h('button.btn.ghost.block', { text: source === 'text' ? 'Anderen Text einfügen' : 'Andere Datei wählen', onclick: drawPicker }),
         ]),
         rawDetails(rawLines),
       ]));
@@ -178,7 +236,7 @@ export function render(root, { navigate }) {
         toast(count ? `${count} Plan${count === 1 ? '' : 'e'} importiert` : 'Nichts importiert');
         navigate('/plans');
       } }),
-      h('button.btn.ghost.block', { text: 'Andere Datei wählen', onclick: drawPicker }),
+      h('button.btn.ghost.block', { text: source === 'text' ? 'Anderen Text einfügen' : 'Andere Datei wählen', onclick: drawPicker }),
     ]));
 
     if (result.unmatched?.length) {

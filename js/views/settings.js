@@ -8,7 +8,7 @@ import { exportBackup } from '../backup.js';
 import { cloudPush, cloudPull } from '../cloud.js';
 import { exportCSV, exportICS, WEEKDAYS_DE } from '../exporters.js';
 
-export const APP_VERSION = '1.27.0';
+export const APP_VERSION = '1.28.0';
 
 const MORE_KEY = 'hantel.moreOpen';
 const moreOpen = new Set((() => { try { return JSON.parse(localStorage.getItem(MORE_KEY) || '[]'); } catch { return []; } })());
@@ -53,6 +53,27 @@ export function render(root, { navigate }) {
   root.append(h('div.card.tappable', { onclick: () => { location.hash = '#/body'; } }, [
     h('div.row.between', {}, [
       h('div', {}, [h('div.title-ico', { html: svgIcon.scale + '<b>Gewicht & Maße</b>' }), h('div.small.faint', { text: 'Körpergewicht und Umfänge mit Verlauf' })]),
+      h('div', { html: svgIcon.chevron }),
+    ]),
+  ]));
+
+  // ---------- Aus anderen Apps übernehmen ----------
+  out = section('import', 'Aus anderen Apps übernehmen', 'Rezepte (Fddb, Cookidoo), Trainingspläne (Notizen, PDF)');
+  out.append(h('div.card.tappable', { onclick: () => { location.hash = '#/food/import'; } }, [
+    h('div.row.between', {}, [
+      h('div', {}, [h('div.title-ico', { html: svgIcon.link + '<b>Rezepte übernehmen</b>' }), h('div.small.faint', { text: 'Fddb & Cookidoo per Link – einzeln oder alle auf einmal; sonst als Text' })]),
+      h('div', { html: svgIcon.chevron }),
+    ]),
+  ]));
+  out.append(h('div.card.tappable', { onclick: () => { location.hash = '#/import?text=1'; } }, [
+    h('div.row.between', {}, [
+      h('div', {}, [h('div.title-ico', { html: svgIcon.doc + '<b>Trainingsplan aus Notizen</b>' }), h('div.small.faint', { text: 'Text aus Apple Notizen einfügen – offline oder per KI erkennen' })]),
+      h('div', { html: svgIcon.chevron }),
+    ]),
+  ]));
+  out.append(h('div.card.tappable', { onclick: () => { location.hash = '#/import'; } }, [
+    h('div.row.between', {}, [
+      h('div', {}, [h('div.title-ico', { html: svgIcon.doc + '<b>Trainingsplan aus PDF</b>' }), h('div.small.faint', { text: 'Mustererkennung offline oder KI-Import' })]),
       h('div', { html: svgIcon.chevron }),
     ]),
   ]));
