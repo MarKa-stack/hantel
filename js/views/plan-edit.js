@@ -1,5 +1,6 @@
 // Plan bearbeiten: Name, Notiz, Kartenbild, Übungen (hinzufügen, ändern, sortieren, löschen)
 import { h, svgIcon, fmtWeight, openSheet, confirmSheet, toast, parseNum, shrinkImage } from '../util.js';
+import { openExercisePicker } from './exercise-picker.js';
 import { getPlan, updatePlan, newExercise, getSettings, exerciseIndex, getPlans } from '../store.js';
 import { inferWeightStep } from '../progression.js';
 
@@ -50,7 +51,9 @@ export function render(root, { params, navigate }) {
   root.append(h('div.subhead', {}, [h('h2', { text: 'Übungen' })]));
   const listEl = h('div.card');
   root.append(listEl);
-  root.append(h('button.btn.block.mt', { html: svgIcon.plus + '<span>Übung hinzufügen</span>', onclick: () => editExercise(null) }));
+  // Übung hinzufügen: erst aus der Datenbank suchen (Gerät, Muskeln, Vorgaben kommen mit)
+  root.append(h('button.btn.primary.block.mt', { html: svgIcon.plus + '<span>Übung hinzufügen</span>', onclick: () => openExercisePicker({ onPick: (e) => editExercise(null, e) }) }));
+  root.append(h('button.btn.sm.ghost.block.mt', { text: 'Ohne Suche eintragen', onclick: () => editExercise(null) }));
 
   const drawList = () => {
     listEl.innerHTML = '';
@@ -71,9 +74,17 @@ export function render(root, { params, navigate }) {
     });
   };
 
-  const editExercise = (ex) => {
+  const editExercise = (ex, picked = null) => {
     const isNew = !ex;
     const draft = ex ? { ...ex } : newExercise();
+    if (picked) {
+      draft.name = picked.name;
+      if (picked.weightStep) draft.weightStep = picked.weightStep;
+      if (picked.defaultReps) draft.reps = String(picked.defaultReps);
+      if (picked.defaultRest) draft.restSec = picked.defaultRest;
+      else if (picked.mechanic === 'compound') draft.restSec = draft.restSec || 150;
+      else if (picked.mechanic === 'isolation') draft.restSec = draft.restSec || 90;
+    }
     openSheet((sheet, close) => {
       const known = [...new Set([
         ...exerciseIndex().map(e => e.name),

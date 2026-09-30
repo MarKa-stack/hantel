@@ -1561,3 +1561,13 @@ details.credits a { color: var(--text-2); }
 .pick-row { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }
 .pick-row:first-child { border-top: 0; }
 .pick-row .min0 { min-width: 0; }
+
+/* ---------- Übungsauswahl (1.29) ---------- */
+.pick-filter { margin-top: 10px; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+.pick-filter .chip { flex: none; }
+.pick-list { max-height: 60vh; overflow-y: auto; margin-top: 4px; }
+.pick-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
+.pick-row:first-child { border-top: 0; }
+.pick-row .min0 { min-width: 0; }
+.pick-row .fig-thumb { flex: none; width: 56px; height: 46px; }
+.lib-row .min0 { min-width: 0; }

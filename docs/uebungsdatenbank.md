@@ -170,3 +170,36 @@ Was ich von dir brauche – am besten vorab, sonst frage ich zwischendurch:
 
 Aufwand grob: Welle 0 ein Arbeitsschritt, danach je Welle ein Schritt – zusammen also überschaubar,
 aber verteilt, damit du jede Stufe prüfen kannst, statt am Ende 100 Übungen auf einmal.
+
+---
+
+## 8. Vergleich mit anderen Apps (Stand 09/2026)
+
+| App | Übungen | Charakter |
+|---|---|---|
+| Jefit | ~1.300–1.400 | größte Sammlung, viele Dubletten und exotische Varianten |
+| Alpha Progression | 795 | kuratiert, jede Übung mit Video und Anleitung |
+| Hevy | 300–400 | solide Standardauswahl |
+| Strong | ~200 Vorlagen | bewusst klein, dafür beliebig eigene Übungen |
+| **Hantel (1.29.0)** | **106** (41 Bewegungen) | Basis + Varianten, jede mit Animation, Gerät, Tipps |
+
+Einordnung: Die großen Zahlen entstehen vor allem durch Varianten, die bei uns zu einer Bewegung
+gehören („Bankdrücken“ mit fünf Varianten sind dort fünf bis sechs Einträge). Mit 106 Einträgen liegen
+wir auf Augenhöhe mit Strong und etwas unter Hevy – und decken ab, was in einem deutschen Studio steht.
+Wachstumspfad bis ~180, sobald der Alltag Lücken zeigt: mehr Maschinenvarianten (Marken-Setups),
+einarmige Kabelvarianten, Unterarme/Nacken, Functional (Kettlebell-Swing, Farmer's Walk, Sled),
+Dehn- und Mobilitätsübungen. Eingebaut wird das über neue Varianten in `js/data/ex-*.js` – ohne
+Änderungen am Code.
+
+## 9. Umgesetzt in 1.29.0
+
+- Datenmodell mit Vererbung (`js/data/ex-*.js`, `js/data/figures.js`, Loader in `js/exercise-db.js`)
+- 106 Übungen in 6 Kategorien, 41 Bewegungen, 32 Gerätetypen (14 neue Geräte gezeichnet)
+- Suche `searchExercises()` mit Muskel-, Geräte- und Kategoriefilter, Umlaut-tolerant, deutsch/englisch
+- Auswahl-Sheet `js/views/exercise-picker.js` im Plan-Editor (Gerät, Muskeln, Varianten, Direktübernahme
+  mit Gewichtsschritt und Pausenvorgabe), Suchfeld in der Übungsbibliothek
+- Prüfseite `tools/exercise-check.html`: validiert Aliase, Muskeln, Geräte, Figuren und Suchtreffer und
+  zeigt alle Übungen als Galerie
+
+Offen für die nächste Runde: Auswahl auch beim „Übung tauschen“ im Training, Filter „nur meine Geräte“,
+Fotos für die neuen Gerätetypen, `ratio` für die Wochenbilanz.

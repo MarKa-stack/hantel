@@ -1,6 +1,7 @@
 // Übungsbibliothek + Vorlagen
 import { h, svgIcon, toast } from '../util.js';
-import { EXERCISES } from '../exercise-db.js';
+import { EXERCISES, searchExercises, exercisesByCategory } from '../exercise-db.js';
+import { EQUIPMENT } from '../equipment.js';
 import { TEMPLATES, WEEK_PLAN, addTemplate } from '../templates.js';
 import { getPlans, getCustomExercises } from '../store.js';
 import { MUSCLE_NAME } from '../muscles.js';
@@ -35,22 +36,42 @@ export function render(root, { navigate, sub }) {
     root.append(h('div.card', {}, [h('p.small.muted', { text: 'Noch keine eigenen Übungen. Für alles, was die Bibliothek nicht kennt: Name, Muskeln, Gewichtsschritt – dann zählt die Übung in Wochenbilanz, Erholung und Progression richtig.' })]));
   }
 
-  const groups = [
-    ['Oberkörper', EXERCISES.slice(0, 16)],
-    ['Unterkörper', EXERCISES.slice(16)],
-  ];
-  for (const [title, list] of groups) {
-    root.append(h('div.subhead', {}, [h('h2', { text: title })]));
-    const card = h('div.card');
-    for (const e of list) {
-      card.append(h('div.lib-row', { onclick: () => openExerciseInfo(e.name) }, [
-        figureThumb(e.name),
-        h('div.grow', {}, [h('div', { text: e.name, style: { fontWeight: 600 } }), h('div.small.faint', { text: e.muscles })]),
-        h('div', { html: svgIcon.chevron }),
-      ]));
+  // Suche über alle Übungen; ohne Suchtext nach Körperpartie gruppiert
+  const search = h('input.input', { type: 'search', placeholder: 'Suchen – z.B. Brustpresse, Latzug, bench press', autocapitalize: 'off', autocomplete: 'off' });
+  const listBox = h('div');
+  root.append(h('div.mt', {}, [search]), listBox);
+
+  const libRow = (e) => h('div.lib-row', { onclick: () => openExerciseInfo(e.name) }, [
+    figureThumb(e.name),
+    h('div.grow.min0', {}, [
+      h('div.clamp2', { text: e.name, style: { fontWeight: 600 } }),
+      h('div.small.faint.clamp2', { text: [e.muscles, EQUIPMENT[e.equip?.type]?.name].filter(Boolean).join(' · ') }),
+    ]),
+    h('div', { html: svgIcon.chevron }),
+  ]);
+
+  const drawList = () => {
+    listBox.innerHTML = '';
+    const q = search.value.trim();
+    if (q) {
+      const hits = searchExercises(q);
+      listBox.append(h('div.subhead', {}, [h('h2', { text: `${hits.length} Treffer` })]));
+      if (!hits.length) { listBox.append(h('div.card', {}, [h('p.small.muted', { text: 'Nichts gefunden – lege die Übung mit „+“ oben als eigene Übung an.' })])); return; }
+      const card = h('div.card');
+      for (const e of hits) card.append(libRow(e));
+      listBox.append(card);
+      return;
     }
-    root.append(card);
-  }
+    for (const [title, list] of exercisesByCategory()) {
+      listBox.append(h('div.subhead', {}, [h('h2', { text: `${title} (${list.length})` })]));
+      const card = h('div.card');
+      for (const e of list) card.append(libRow(e));
+      listBox.append(card);
+    }
+  };
+  let t = null;
+  search.addEventListener('input', () => { clearTimeout(t); t = setTimeout(drawList, 120); });
+  drawList();
 }
 
 export function renderTemplates(root, navigate) {
