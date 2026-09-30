@@ -84,7 +84,14 @@ export function findExercise(name) {
   const n = normalizeExerciseName(name);
   if (!n) return null;
   for (const e of BY_ALIAS_LEN) if (e.aliases.some(a => a === n)) return e;
-  for (const e of BY_ALIAS_LEN) if (e.aliases.some(a => a.length >= 5 && (n.includes(a) || (a.includes(n) && n.length >= 5)))) return e;
+  // Teiltreffer nur, wenn sich Name und Alias weitgehend decken – sonst würde „Bauch“ zu „Beinbeuger, Bauchlage“
+  for (const e of BY_ALIAS_LEN) {
+    for (const a of e.aliases) {
+      if (a.length < 5) continue;
+      if (!(n.includes(a) || (a.includes(n) && n.length >= 5))) continue;
+      if (Math.min(a.length, n.length) / Math.max(a.length, n.length) >= 0.72) return e;
+    }
+  }
   return null;
 }
 
@@ -125,6 +132,73 @@ export function searchExercises(q, { muscle = null, equip = null, category = nul
     if (s) scored.push({ e, s: s + (e.baseId ? 0 : 3) }); // Basisübung leicht bevorzugen
   }
   return scored.sort((a, b) => b.s - a.s || a.e.name.localeCompare(b.e.name)).slice(0, limit).map(x => x.e);
+}
+
+/**
+ * Vorschläge zu einem freien Namen („Hantelbank“, „Brust Maschine“, „BD“) – auch wenn kein Alias passt.
+ * Zerlegt den Namen in Wörter und deren Vor-/Nachsilben (ab 4 Zeichen) und sucht sie in Name, Aliassen,
+ * Gerätename und Muskeltext. So findet „Hantelbank“ alles rund um Hantel und Bank.
+ */
+export function suggestExercises(name, limit = 8) {
+  const n = fold(name);
+  if (!n) return [];
+  const words = n.split(' ').filter(w => w.length >= 3).map(w => w);
+  const frags = new Set(words);
+  for (const w of words) {
+    if (w.length < 6) continue;
+    for (let l = w.length - 1; l >= 4; l--) { frags.add(w.slice(0, l)); frags.add(w.slice(w.length - l)); }
+  }
+  // Mögliche Zerlegungen zusammengesetzter Wörter (beide Teile ab 4 Zeichen)
+  const splits = [];
+  for (const w of words) for (let i = 4; i <= w.length - 4; i++) splits.push([w.slice(0, i), w.slice(i)]);
+  const scored = [];
+  for (const e of EXERCISES) {
+    // Treffer im Namen zählen doppelt, Treffer nur im Gerät oder Muskel einfach
+    const hayName = fold([e.name, ...e.aliases].join(' '));
+    const hayElse = fold([EQUIP_NAME[e.equip?.type] || '', e.muscles].join(' '));
+    let best = 0;
+    for (const f of frags) {
+      if (hayName.includes(f)) best = Math.max(best, f.length * 2);
+      else if (hayElse.includes(f)) best = Math.max(best, f.length);
+    }
+    // Zusammengesetzte Wörter: passen beide Hälften („Hantel“ + „bank“), zählt das deutlich mehr
+    for (const [a, b] of splits) {
+      const hitA = hayName.includes(a) ? a.length * 2 : hayElse.includes(a) ? a.length : 0;
+      const hitB = hayName.includes(b) ? b.length * 2 : hayElse.includes(b) ? b.length : 0;
+      if (hitA && hitB) best = Math.max(best, hitA + hitB);
+    }
+    if (best >= 3) scored.push({ e, s: best + (e.baseId ? 0 : 1) });
+  }
+  return scored.sort((a, b) => b.s - a.s || a.e.name.localeCompare(b.e.name)).slice(0, limit).map(x => x.e);
+}
+
+// Gerätenamen für die Vorschlagssuche (equipment.js importiert diese Datei nicht – kein Ringschluss)
+const EQUIP_NAME = {
+  cable_tower: 'Kabelzug Kabelturm', cable_crossover: 'Kabelzug Crossover', lat_pulldown: 'Latzug',
+  chest_press: 'Brustpresse Maschine', row_machine: 'Rudermaschine', seated_row_cable: 'Rudern Kabel sitzend',
+  pec_deck: 'Butterfly Pec Deck', incline_bench: 'Schrägbank Hantelbank', flat_bench: 'Flachbank Hantelbank Bank',
+  hack_squat: 'Hackenschmidt', leg_press: 'Beinpresse', leg_extension: 'Beinstrecker', leg_curl_seated: 'Beinbeuger sitzend',
+  leg_curl_lying: 'Beinbeuger liegend', calf_standing: 'Wadenmaschine stehend', calf_seated: 'Wadenmaschine sitzend',
+  hip_thrust: 'Hip Thrust Maschine', dumbbells: 'Kurzhantel Hantel Hanteln', barbell: 'Langhantel Hantel Stange',
+  mat: 'Matte Boden', squat_rack: 'Rack Kniebeugeständer Langhantel', smith_machine: 'Multipresse Smith',
+  pullup_bar: 'Klimmzugstange Stange', dip_station: 'Dip Barren', preacher_bench: 'Scott Bank Hantelbank',
+  abduction_machine: 'Abduktoren Adduktoren', back_extension: 'Rückenstrecker Hyperextension', t_bar_row: 'T-Bar Rudern',
+  shoulder_press_machine: 'Schulterpresse Maschine', ez_bar: 'SZ Stange Hantel', kettlebell: 'Kettlebell',
+  bodyweight: 'Körpergewicht ohne Gerät',
+};
+
+/**
+ * Zuordnung eines importierten Namens zur Datenbank.
+ * @returns {{ entry: object|null, confidence: 'exact'|'fuzzy'|null, suggestions: object[] }}
+ */
+export function matchExercise(name) {
+  const n = normalizeExerciseName(name);
+  if (!n) return { entry: null, confidence: null, suggestions: [] };
+  for (const e of BY_ALIAS_LEN) if (e.aliases.some(a => a === n)) return { entry: e, confidence: 'exact', suggestions: [] };
+  const fuzzy = findExercise(name);
+  const suggestions = suggestExercises(name).filter(e => e !== fuzzy);
+  if (fuzzy) return { entry: fuzzy, confidence: 'fuzzy', suggestions };
+  return { entry: null, confidence: null, suggestions };
 }
 
 /** Übungen nach Kategorie gruppiert (für Bibliothek und Auswahl ohne Suchtext) */

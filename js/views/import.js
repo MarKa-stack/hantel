@@ -1,9 +1,13 @@
 // Plan-Import: PDF oder Text (z.B. aus Apple Notizen) → erkennen (Muster oder KI) → prüfen → speichern
-import { h, svgIcon, toast, parseNum } from '../util.js';
+import { h, svgIcon, toast, parseNum, openSheet } from '../util.js';
 import { addPlan, newPlan, newExercise, getSettings } from '../store.js';
 import { extractLines, parsePlanText } from '../pdf-import.js';
 import { aiExtractPlans, aiExtractPlansFromText } from '../ai-import.js';
 import { aiReady, aiConfig } from '../llm.js';
+import { matchExercise, getExercise } from '../exercise-db.js';
+import { EQUIPMENT } from '../equipment.js';
+import { figureThumb } from './exercise-info.js';
+import { openExercisePicker } from './exercise-picker.js';
 
 let mode = 'pattern';
 let source = 'pdf'; // 'pdf' | 'text'
@@ -170,6 +174,25 @@ export function render(root, { navigate, query }) {
     const total = plans.reduce((a, p) => a + p.exercises.length, 0);
     body.append(h('p.muted', { html: `<b>${total} Übung${total === 1 ? '' : 'en'}</b> in <b>${plans.length === 1 ? '1 Plan' : plans.length + ' Plänen'}</b> erkannt. Prüfe die Werte und korrigiere, was nicht passt.` }));
 
+    // Namen mit der Übungsdatenbank abgleichen: eindeutige Treffer übernehmen, Rest zur Auswahl markieren
+    for (const p of plans) for (const e of p.exercises) applyMatch(e);
+    const summary = h('div.card.match-summary');
+    const updateSummary = () => {
+      const all = plans.flatMap(p => p.exercises);
+      const ok = all.filter(e => e.matchId).length;
+      const open = all.length - ok;
+      summary.innerHTML = '';
+      summary.append(h('div.row.between', {}, [
+        h('div.grow', {}, [
+          h('b', { text: `${ok} von ${all.length} Übungen zugeordnet` }),
+          h('div.small.faint', { text: open ? `${open} noch offen – antippen und aus der Datenbank wählen; ohne Zuordnung bleibt der Name so stehen.` : 'Alle Übungen kennen Gerät und Muskeln – Wochenbilanz und Progression rechnen damit richtig.' }),
+        ]),
+        open ? h('button.btn.sm.ghost', { text: 'Offene zeigen', onclick: () => { const el = body.querySelector('.ex-match.open'); el?.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }) : null,
+      ]));
+    };
+    body.append(summary);
+    updateSummary();
+
     const planCards = h('div.stack.mt');
     body.append(planCards);
 
@@ -196,8 +219,10 @@ export function render(root, { navigate, query }) {
             w.addEventListener('input', () => { e.weight = parseNum(w.value); });
             rs.addEventListener('input', () => { e.restSec = parseInt(rs.value, 10) || null; });
             const del = h('button.del', { html: svgIcon.trash, 'aria-label': 'Entfernen', onclick: () => { p.exercises.splice(ei, 1); drawEx(); } });
+            n.addEventListener('change', () => { applyMatch(e); drawEx(); updateSummary(); });
             exList.append(h('div.imp-ex', {}, [
               n, del,
+              matchRow(e, () => { drawEx(); updateSummary(); }),
               h('div.imp-hdr', { style: { gridColumn: '1 / -1' } }, [h('span', { text: 'Sätze' }), h('span', { text: 'Wdh' }), h('span', { text: settings.unit }), h('span', { text: 'Pause s' })]),
               h('div.nums', {}, [s, r, w, rs]),
               e.note ? h('div.note', { text: e.note }) : null,
@@ -227,7 +252,7 @@ export function render(root, { navigate, query }) {
           if (!p.include) continue;
           const exercises = p.exercises.filter(e => e.name.trim()).map(e => newExercise({
             name: e.name.trim(), sets: Math.max(1, e.sets || 1), reps: String(e.reps || '10').trim(),
-            weight: e.weight ?? null, restSec: e.restSec || null, note: e.note || '',
+            weight: e.weight ?? null, restSec: e.restSec || null, note: e.note || '', weightStep: e.weightStep ?? null,
           }));
           if (!exercises.length) continue;
           addPlan(newPlan({ name: p.name.trim() || fallbackName, exercises }));
@@ -247,6 +272,88 @@ export function render(root, { navigate, query }) {
       body.append(det);
     }
     body.append(rawDetails(rawLines));
+  };
+
+  // ---------- Zuordnung zur Übungsdatenbank ----------
+
+  /** Eindeutige Treffer sofort übernehmen, sonst Vorschläge merken */
+  const applyMatch = (e) => {
+    const raw = (e.name || '').trim();
+    const m = matchExercise(raw);
+    e.suggestions = m.suggestions;
+    if (m.confidence === 'exact') {
+      e.matchId = m.entry.id;
+      if (m.entry.name !== raw) e.origName = raw;
+      e.name = m.entry.name;
+    } else {
+      e.matchId = null;
+      e.suggestion = m.entry || null; // unsicherer Treffer → nur vorschlagen
+    }
+  };
+
+  /** Zeile unter dem Namen: Treffer, Vorschlag oder „zuordnen“ */
+  const matchRow = (e, onChange) => {
+    const entry = e.matchId ? getExercise(e.matchId) : null;
+    const choose = () => openMatchSheet(e, onChange);
+    if (entry) {
+      return h('div.ex-match.ok', { style: { gridColumn: '1 / -1' }, onclick: choose }, [
+        h('span.dot', { html: svgIcon.check }),
+        h('span.grow.truncate', { text: `${entry.name} · ${entry.muscles}` + (e.origName ? ` (aus „${e.origName}“)` : '') }),
+        h('span.small.faint', { text: 'ändern' }),
+      ]);
+    }
+    const sug = e.suggestion || e.suggestions?.[0] || null;
+    return h('div.ex-match.open', { style: { gridColumn: '1 / -1' }, onclick: choose }, [
+      h('span.dot.warn', { html: svgIcon.warning }),
+      h('span.grow.truncate', { text: sug ? `Nicht sicher – Vorschlag: ${sug.name}` : 'Nicht in der Datenbank' }),
+      h('span.small', { text: (e.suggestions?.length || 0) > 1 ? `${e.suggestions.length} Vorschläge` : 'zuordnen' }),
+    ]);
+  };
+
+  /** Auswahl: Vorschläge (z.B. alle Bank-Varianten zu „Hantelbank“), volle Suche oder Name behalten */
+  const openMatchSheet = (e, onChange) => {
+    const raw = (e.origName || e.name || '').trim();
+    const list = [];
+    if (e.suggestion) list.push(e.suggestion);
+    for (const s of e.suggestions || []) if (!list.includes(s)) list.push(s);
+    if (e.matchId) { const cur = getExercise(e.matchId); if (cur && !list.includes(cur)) list.unshift(cur); }
+    openSheet((sheet, close) => {
+      const take = (entry) => {
+        e.matchId = entry.id;
+        e.origName = raw !== entry.name ? raw : null;
+        e.name = entry.name;
+        if (entry.weightStep) e.weightStep = entry.weightStep;
+        close(); onChange();
+      };
+      sheet.append(
+        h('div.row.between', {}, [h('h3', { text: `„${raw}“ zuordnen`, style: { margin: 0 } }), h('button.btn.sm.ghost', { text: 'Schließen', onclick: close })]),
+        h('p.small.faint', { text: list.length ? 'Welche Übung ist gemeint? Danach kennt die App Gerät, Muskeln und Gewichtsschritt.' : 'Keine passende Übung gefunden – such in der Datenbank oder behalte den Namen.' }),
+      );
+      const box = h('div.pick-list');
+      for (const entry of list) {
+        box.append(h('div.pick-row', { onclick: () => take(entry) }, [
+          figureThumb(entry.name) || h('div.fig-thumb'),
+          h('div.grow.min0', {}, [
+            h('div.clamp2', { text: entry.name, style: { fontWeight: 600 } }),
+            h('div.small.faint.clamp2', { text: [entry.muscles, EQUIPMENT[entry.equip?.type]?.name].filter(Boolean).join(' · ') }),
+          ]),
+          h('div', { html: svgIcon.chevron }),
+        ]));
+      }
+      sheet.append(box);
+      sheet.append(h('div.stack.mt', {}, [
+        h('button.btn.block', { html: svgIcon.search || svgIcon.plus, onclick: () => { close(); openExercisePicker({ title: `„${raw}“ zuordnen`, query: raw, onPick: (picked) => { if (picked.id) take2(e, picked, onChange); else { e.name = picked.name; e.matchId = null; e.origName = null; onChange(); } } }); } }, [h('span', { text: 'In der Datenbank suchen' })]),
+        h('button.btn.ghost.block', { text: `Name „${raw}“ behalten`, onclick: () => { e.name = raw; e.matchId = null; e.origName = null; close(); onChange(); } }),
+      ]));
+    });
+  };
+  const take2 = (e, entry, onChange) => {
+    e.matchId = entry.id;
+    const raw = (e.origName || e.name || '').trim();
+    e.origName = raw !== entry.name ? raw : null;
+    e.name = entry.name;
+    if (entry.weightStep) e.weightStep = entry.weightStep;
+    onChange();
   };
 
   const rawDetails = (rawLines) => rawLines?.length

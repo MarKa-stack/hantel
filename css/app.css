@@ -1571,3 +1571,14 @@ details.credits a { color: var(--text-2); }
 .pick-row .min0 { min-width: 0; }
 .pick-row .fig-thumb { flex: none; width: 56px; height: 46px; }
 .lib-row .min0 { min-width: 0; }
+.ex-match .truncate { min-width: 0; }
+.ex-match .small, .ex-match .small.faint { margin-left: auto; white-space: nowrap; font-size: 12px; }
+
+/* ---------- Import: Zuordnung zur Übungsdatenbank (1.30) ---------- */
+.match-summary { margin-top: 10px; padding: 12px 14px; }
+.ex-match { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 8px; border-radius: 9px; font-size: 13px; cursor: pointer; line-height: 1.3; }
+.ex-match .dot { width: 18px; height: 18px; flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.ex-match .dot svg { width: 14px; height: 14px; fill: currentColor; }
+.ex-match.ok { background: var(--good-soft); color: var(--good); }
+.ex-match.open { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.ex-match .grow { min-width: 0; }
