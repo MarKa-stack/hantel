@@ -29,8 +29,11 @@ export function sumMacros(list) {
 
 export function recipeTotals(recipe) {
   const grams = recipe.items.reduce((a, it) => a + (Number(it.grams) || 0), 0);
-  const total = sumMacros(recipe.items.map(it => macros(it.per100, it.grams)));
+  let total = sumMacros(recipe.items.map(it => macros(it.per100, it.grams)));
   const servings = Math.max(1, Number(recipe.servings) || 1);
+  // Offizielle Nährwerte der Quelle (z.B. Cookidoo) haben Vorrang vor der Schätzung aus den Zutaten
+  const src = recipe.useSourceNutrition && recipe.sourceNutrition?.kcal ? recipe.sourceNutrition : null;
+  if (src) total = { kcal: (Number(src.kcal) || 0) * servings, protein: (Number(src.protein) || 0) * servings, carbs: (Number(src.carbs) || 0) * servings, fat: (Number(src.fat) || 0) * servings };
   const perServing = { kcal: Math.round(total.kcal / servings), protein: r1(total.protein / servings), carbs: r1(total.carbs / servings), fat: r1(total.fat / servings) };
   const per100 = grams ? { kcal: Math.round(total.kcal / grams * 100), protein: r1(total.protein / grams * 100), carbs: r1(total.carbs / grams * 100), fat: r1(total.fat / grams * 100) } : { kcal: 0, protein: 0, carbs: 0, fat: 0 };
   return { grams, total, perServing, per100, servings, gramsPerServing: Math.round(grams / servings) };

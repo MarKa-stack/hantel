@@ -7,6 +7,7 @@ import { aiParseFood } from '../ai-food.js';
 import { openScanner, scannerAvailable } from '../scanner.js';
 import { aiReady } from '../llm.js';
 import { openPhotoSheet } from './food-photo.js';
+import { fetchCookidoo, ingredientsToItems, toRecipeDraft, parseYield, cookidooUrl, cookidooReady } from '../cookidoo.js';
 
 let curKey = dateKey();
 let unsub = null;
@@ -566,6 +567,8 @@ function renderRecipes(root, { navigate }) {
     h('button.btn.ai-btn', { html: svgIcon.sparkle + '<span>Rezept aus Zutaten</span>', onclick: () => navigate('/food/generate') }),
     h('button.btn.ai-btn', { html: svgIcon.doc + '<span>Frei beschreiben</span>', onclick: () => openAiSheet({ recipeMode: true, onRecipe: (r) => navigate('/food/recipe/' + r.id) }) }),
   ]));
+  // Thermomix: Rezept aus Cookidoo übernehmen
+  root.append(h('button.btn.ai-btn.block.mb', { html: svgIcon.link + '<span>Cookidoo-Rezept importieren</span>', onclick: () => openCookidooSheet((r) => navigate('/food/recipe/' + r.id)) }));
   const list = getRecipes();
   if (!list.length) { root.append(h('div.card', {}, [h('p.small.muted', { text: 'Noch keine Rezepte. Oben per KI aus deinen Zutaten erstellen lassen, in einem Satz beschreiben oder mit „+“ Zutat für Zutat anlegen. Ein Rezept trägst du danach mit zwei Tipps als Portion ein.' })])); return; }
   // Liste eingeklappt hinter einem Reiter – die Seite bleibt ruhig, bis man sie braucht
@@ -573,12 +576,83 @@ function renderRecipes(root, { navigate }) {
   for (const r of list) {
     const t = recipeTotals(r);
     card.append(h('div.food-row', { onclick: () => navigate('/food/recipe/' + r.id) }, [
-      h('div.grow.min0', {}, [h('div.clamp2', { text: r.name, style: { fontWeight: 600 } }), h('div.small.faint', { text: `${r.servings} Portionen · ${r.items.length} Zutaten · pro Portion ${fmtKcal(t.perServing.kcal)} kcal · ${fmtG(t.perServing.protein)} g P` })]),
+      h('div.grow.min0', {}, [
+        h('div.clamp2', { html: escapeHtml(r.name) + (r.source === 'cookidoo' ? ' <span class="pill sm">Cookidoo</span>' : '') + (r.variations?.length ? ' <span class="pill accent sm">abgewandelt</span>' : ''), style: { fontWeight: 600 } }),
+        h('div.small.faint', { text: `${r.servings} Portionen · ${r.items.length} Zutaten · pro Portion ${fmtKcal(t.perServing.kcal)} kcal · ${fmtG(t.perServing.protein)} g P` }),
+      ]),
       h('div', { html: svgIcon.chevron }),
     ]));
   }
   const tab = h('button.btn.ghost.block.tab-toggle', { html: `<span>Meine Rezepte (${list.length})</span>` + svgIcon.chevron, onclick: () => { card.hidden = !card.hidden; tab.classList.toggle('open', !card.hidden); } });
   root.append(tab, card);
+}
+
+
+// ---------- Cookidoo-Import (Thermomix) ----------
+
+/** Link einfügen → öffentliche Rezeptdaten holen → Zutaten per KI in Gramm/Nährwerte → Rezept anlegen */
+export function openCookidooSheet(onSaved) {
+  openSheet((sheet, close) => {
+    const linkIn = h('input.input', { type: 'url', inputmode: 'url', placeholder: 'https://cookidoo.de/recipes/recipe/de-DE/r…', autocapitalize: 'off', spellcheck: false });
+    const manual = h('textarea.input', { rows: 6, placeholder: 'Alternativ: Zutaten einfügen, eine je Zeile\n\n500 g Hähnchenbrust\n200 g Frischkäse\n1 TL Paprikapulver', style: { minHeight: '120px' } });
+    const nameIn = h('input.input', { type: 'text', placeholder: 'Rezeptname' });
+    const servIn = h('input.input.num', { type: 'text', inputmode: 'numeric', value: '4', style: { width: '90px' } });
+    const manualBox = h('div', { hidden: true }, [
+      h('div.field.mt', {}, [h('label', { text: 'Name' }), nameIn]),
+      h('div.row.between.mt', {}, [h('label.small.muted', { text: 'Portionen' }), servIn]),
+      h('div.field.mt', {}, [h('label', { text: 'Zutaten' }), manual]),
+    ]);
+    const toggle = h('button.btn.sm.ghost.block.mt', { text: 'Stattdessen Zutaten als Text einfügen', onclick: () => {
+      const on = manualBox.hidden;
+      manualBox.hidden = !on; linkBox.hidden = on;
+      toggle.textContent = on ? 'Doch einen Link einfügen' : 'Stattdessen Zutaten als Text einfügen';
+    } });
+    const linkBox = h('div', {}, [
+      h('div.field.mt', {}, [h('label', { text: 'Cookidoo-Link' }), linkIn]),
+      h('p.small.faint', { text: 'In der Cookidoo-App: Rezept öffnen → Teilen → Link kopieren. Übernommen werden Name, Zutaten, Portionen, Zeit und die Nährwerte von Cookidoo – die Zubereitungsschritte bleiben in Cookidoo, die App verlinkt darauf.' }),
+    ]);
+    const status = h('p.small.muted.mt');
+    const go = h('button.btn.primary.block.mt', { html: svgIcon.sparkle + '<span>Rezept holen</span>' });
+
+    go.addEventListener('click', async () => {
+      const useManual = !manualBox.hidden;
+      go.disabled = true; toggle.disabled = true;
+      const step = (t) => { status.textContent = t; };
+      try {
+        let ck, lines;
+        if (useManual) {
+          const nm = nameIn.value.trim();
+          lines = manual.value.split('\n').map(s => s.trim()).filter(Boolean);
+          if (!nm) throw new Error('Name fehlt.');
+          if (!lines.length) throw new Error('Keine Zutaten eingefügt.');
+          ck = { name: nm, url: cookidooUrl(manual.value) || null, ingredients: lines, yieldText: `${Math.max(1, parseInt(servIn.value, 10) || 1)} Portionen`, totalMinutes: null, perServing: null };
+        } else {
+          step('Rezept wird bei Cookidoo geholt …');
+          ck = await fetchCookidoo(linkIn.value);
+          lines = ck.ingredients;
+        }
+        const y = parseYield(ck.yieldText);
+        step(`„${ck.name}“ – ${lines.length} Zutaten. Mengen und Nährwerte werden berechnet …`);
+        const items = await ingredientsToItems(lines, { servings: y.servings, name: ck.name });
+        const draft = toRecipeDraft(ck, items);
+        if (useManual) { draft.source = ck.url ? 'cookidoo' : 'manuell'; draft.sourceUrl = ck.url; draft.sourceLabel = ck.url ? 'Cookidoo' : ''; }
+        const saved = saveRecipe(draft);
+        close();
+        toast('Rezept importiert – bitte Mengen prüfen', { duration: 5000 });
+        onSaved?.(saved);
+      } catch (e) {
+        status.textContent = '';
+        toast(e.message || 'Import fehlgeschlagen', { duration: 7000 });
+        go.disabled = false; toggle.disabled = false;
+      }
+    });
+
+    sheet.append(
+      h('h3', { text: 'Cookidoo-Rezept importieren' }),
+      linkBox, manualBox, toggle, status, go,
+      !aiReady() ? h('p.small.muted.mt', { text: 'Für die Nährwerte braucht es einen KI-Zugang (Mehr → KI).' }) : null,
+    );
+  });
 }
 
 function renderRecipeEditor(root, { params, navigate }) {
@@ -595,6 +669,34 @@ function renderRecipeEditor(root, { params, navigate }) {
   serv.addEventListener('input', () => { d.servings = Math.max(1, parseInt(serv.value, 10) || 1); drawTotals(); });
   root.append(h('div.field', {}, [h('label', { text: 'Name' }), name]));
   root.append(h('div.row.between.mt', {}, [h('label.small.muted', { text: 'Portionen' }), serv]));
+
+  // Herkunft (Cookidoo & Co.): Link aufs Original und die offiziellen Nährwerte
+  if (d.sourceUrl || d.sourceNutrition) {
+    const card = h('div.card.src-card.mt');
+    const meta = [d.yieldText || null, d.prepTimeMinutes ? `${d.prepTimeMinutes} Min` : null].filter(Boolean).join(' · ');
+    card.append(h('div.row.between', {}, [
+      h('div.grow.min0', {}, [
+        h('div.title-ico', { html: svgIcon.link + `<b>${escapeHtml(d.sourceLabel || 'Quelle')}</b>` }),
+        meta ? h('div.small.faint', { text: meta }) : null,
+      ]),
+      d.sourceUrl ? h('a.btn.sm.ghost', { href: d.sourceUrl, target: '_blank', rel: 'noopener', text: 'Öffnen' }) : null,
+    ]));
+    if (d.sourceNutrition?.kcal) {
+      const sn = d.sourceNutrition;
+      const box = h('label.switch', {}, [
+        h('div.grow', {}, [
+          h('div.lbl', { text: `${d.sourceLabel || 'Quelle'}-Nährwerte verwenden` }),
+          h('div.desc', { text: `${fmtKcal(sn.kcal)} kcal · ${fmtG(sn.protein)} g P · ${fmtG(sn.carbs)} g KH · ${fmtG(sn.fat)} g F pro Portion` }),
+        ]),
+      ]);
+      const cb = h('input', { type: 'checkbox', checked: !!d.useSourceNutrition });
+      cb.addEventListener('change', () => { d.useSourceNutrition = cb.checked; if (!isNew) saveRecipe({ id: d.id, useSourceNutrition: cb.checked }); drawTotals(); });
+      box.append(h('label.toggle', {}, [cb, h('span')]));
+      card.append(box);
+      card.append(h('p.small.faint', { text: 'Aus: Schätzung aus den Zutaten (ändert sich mit den Gramm unten).' }));
+    }
+    root.append(card);
+  }
 
   root.append(h('div.subhead', {}, [h('h2', { text: 'Zutaten' })]));
   const list = h('div.card');
@@ -623,7 +725,7 @@ function renderRecipeEditor(root, { params, navigate }) {
           h('button.btn.icon.ghost', { html: svgIcon.trash, 'aria-label': 'Zutat entfernen', style: { width: '36px', minHeight: '36px' }, onclick: () => { d.items.splice(i, 1); drawList(); } }),
         ]),
         h('div.ing-bottom', {}, [
-          h('div.small.faint.grow', { text: `${fmtKcal(it.per100.kcal)} kcal · ${fmtG(it.per100.protein)} g P / 100 g` }),
+          h('div.small.faint.grow.clamp2', { text: `${fmtKcal(it.per100.kcal)} kcal · ${fmtG(it.per100.protein)} g P / 100 g` + (it.note ? ` · ${it.note}` : '') }),
           gIn, h('span.small.faint', { text: 'g' }), kcalEl,
         ]),
       ]));
@@ -645,6 +747,33 @@ function renderRecipeEditor(root, { params, navigate }) {
   };
   drawList();
 
+
+  // Abwandlungen: was beim Kochen anders gemacht wurde – datierte Notizen, sofort gespeichert
+  root.append(h('div.subhead', {}, [h('h2', { text: 'Abwandlungen' })]));
+  const varCard = h('div.card');
+  const persistVars = () => { if (!isNew) saveRecipe({ id: d.id, variations: d.variations }); };
+  const drawVars = () => {
+    varCard.innerHTML = '';
+    d.variations = d.variations || [];
+    if (!d.variations.length) varCard.append(h('p.small.muted', { style: { padding: '4px 0' }, text: isNew ? 'Nach dem Speichern kannst du hier notieren, was du anders gemacht hast.' : 'Noch nichts notiert – z.B. „statt Sahne 200 g Frischkäse“ oder „5 Minuten länger auf Stufe 2“.' }));
+    for (const v of [...d.variations].reverse()) {
+      varCard.append(h('div.var-row', {}, [
+        h('div.grow.min0', {}, [h('div', { text: v.text }), h('div.small.faint', { text: fmtDate(v.at) })]),
+        h('button.btn.icon.ghost', { html: svgIcon.trash, 'aria-label': 'Notiz löschen', style: { width: '36px', minHeight: '36px' }, onclick: async () => {
+          if (await confirmSheet({ title: 'Notiz löschen?', okLabel: 'Löschen', danger: true })) { d.variations = d.variations.filter(x => x.id !== v.id); persistVars(); drawVars(); }
+        } }),
+      ]));
+    }
+    varCard.append(h('button.btn.sm.ghost.block.mt', { html: svgIcon.plus + '<span>Abwandlung notieren</span>', onclick: async () => {
+      const t = await promptSheet({ title: 'Abwandlung', label: 'Was hast du anders gemacht?', placeholder: 'z.B. doppelt Knoblauch, statt Sahne Frischkäse', okLabel: 'Merken' });
+      if (!t) return;
+      d.variations = [...(d.variations || []), { id: Math.random().toString(36).slice(2, 9), at: Date.now(), text: t.trim().slice(0, 300) }];
+      persistVars(); drawVars();
+      if (isNew) toast('Wird mit dem Rezept gespeichert');
+    } }));
+  };
+  drawVars();
+  root.append(varCard);
   const saveIt = () => {
     const n = name.value.trim(); if (!n) { name.focus(); toast('Name fehlt'); return null; }
     if (!d.items.length) { toast('Mindestens eine Zutat'); return null; }

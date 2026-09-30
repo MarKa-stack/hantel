@@ -1547,3 +1547,12 @@ details.credits a { color: var(--text-2); }
 .coach-num { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-family: var(--display); font-weight: 700; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; margin-top: 1px; }
 .coach-card .coach-teaser { margin-top: 4px; }
 .busy { opacity: 0.6; pointer-events: none; }
+
+/* ---------- Cookidoo-Import & Abwandlungen (1.26) ---------- */
+.src-card .title-ico svg { fill: var(--accent); }
+.src-card .switch { padding: 12px 0 8px; margin-top: 8px; border-top: 1px solid var(--border); }
+.src-card p.small { margin: 0; }
+.var-row { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--border); line-height: 1.35; }
+.var-row:first-child { border-top: 0; padding-top: 2px; }
+.var-row .min0 { min-width: 0; overflow-wrap: anywhere; }
+.pill.sm { font-size: 10px; padding: 1px 6px; vertical-align: 2px; }

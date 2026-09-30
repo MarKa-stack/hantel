@@ -200,6 +200,93 @@ async function handleOff(request, path, cors, env) {
   }
 }
 
+// ---------- Cookidoo (Thermomix): öffentliche Rezeptdaten holen ----------
+// Nur die Daten, die Cookidoo selbst öffentlich als schema.org/Recipe ausliefert (Name, Zutaten,
+// Portionen, Zeiten, Nährwerte je Portion). Die Zubereitungsschritte sind kostenpflichtig und
+// werden bewusst NICHT übernommen – die App verlinkt stattdessen auf das Originalrezept.
+
+const CK_UA = 'Hantel/1.25 (+https://github.com/MarKa-stack/hantel)';
+const CK_HOST = /^(www\.)?cookidoo\.[a-z.]{2,6}$/i;
+
+function ckText(s) {
+  return String(s == null ? '' : s)
+    .replace(/&frac12;/g, '½').replace(/&frac14;/g, '¼').replace(/&frac34;/g, '¾')
+    .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+}
+/** ISO-8601-Dauer (PT1H30M) → Minuten */
+function ckMinutes(v) {
+  const m = /^P(?:([\d.]+)D)?T?(?:([\d.]+)H)?(?:([\d.]+)M)?/.exec(String(v || ''));
+  if (!m) return null;
+  const min = (parseFloat(m[1]) || 0) * 1440 + (parseFloat(m[2]) || 0) * 60 + (parseFloat(m[3]) || 0);
+  return min > 0 ? Math.round(min) : null;
+}
+function ckNum(v) { const n = parseFloat(String(v == null ? '' : v).replace(',', '.').replace(/[^\d.]/g, '')); return Number.isFinite(n) ? n : null; }
+
+/** Alle JSON-LD-Blöcke einer Seite nach @type Recipe durchsuchen */
+function ckRecipeFromHtml(html) {
+  const re = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    let data;
+    try { data = JSON.parse(m[1].replace(/&frac12;/g, '½').replace(/&frac14;/g, '¼').replace(/&frac34;/g, '¾')); } catch { continue; }
+    const list = [].concat(data['@graph'] || data);
+    for (const node of list) {
+      const t = [].concat(node && node['@type'] || []);
+      if (t.includes('Recipe')) return node;
+    }
+  }
+  return null;
+}
+
+/** GET /cookidoo?url=… – öffentliche Rezeptdaten, 7 Tage am Edge gecacht */
+async function handleCookidoo(request, cors) {
+  const raw = (new URL(request.url).searchParams.get('url') || '').trim();
+  let target;
+  try { target = new URL(raw); } catch { return json({ ok: false, error: 'Keine gültige Adresse.' }, 400, cors); }
+  if (target.protocol !== 'https:' || !CK_HOST.test(target.hostname)) return json({ ok: false, error: 'Nur cookidoo-Links (z.B. https://cookidoo.de/recipes/recipe/de-DE/r123456).' }, 400, cors);
+  const clean = `https://${target.hostname}${target.pathname}`;
+
+  const cache = globalThis.caches?.default || null;
+  const cacheKey = new Request('https://cache.hantel/cookidoo?u=' + encodeURIComponent(clean), { method: 'GET' });
+  const hit = cache ? await cache.match(cacheKey) : null;
+  if (hit) return new Response(hit.body, { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'X-Cache': 'HIT', ...cors } });
+
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 15000);
+  let html;
+  try {
+    const res = await fetch(clean, { headers: { 'User-Agent': CK_UA, Accept: 'text/html', 'Accept-Language': 'de-DE,de;q=0.9' }, signal: ctl.signal, redirect: 'follow' });
+    if (res.status === 404) return json({ ok: false, error: 'Rezept nicht gefunden – stimmt der Link?' }, 404, cors);
+    if (!res.ok) return json({ ok: false, error: `Cookidoo antwortet mit ${res.status}.` }, 502, cors);
+    html = (await res.text()).slice(0, 900_000);
+  } catch {
+    return json({ ok: false, error: 'Cookidoo antwortet gerade nicht – gleich nochmal versuchen.' }, 503, cors);
+  } finally { clearTimeout(timer); }
+
+  const r = ckRecipeFromHtml(html);
+  if (!r) return json({ ok: false, error: 'Auf der Seite stehen keine Rezeptdaten. Alternativ die Zutaten als Text einfügen.' }, 422, cors);
+  const n = r.nutrition || {};
+  const data = {
+    url: clean,
+    name: ckText(r.name).slice(0, 120),
+    ingredients: [].concat(r.recipeIngredient || r.ingredients || []).map(x => ckText(x).slice(0, 160)).filter(Boolean).slice(0, 60),
+    yieldText: ckText([].concat(r.recipeYield || [])[0] || '').slice(0, 60),
+    totalMinutes: ckMinutes(r.totalTime) || ckMinutes(r.cookTime),
+    prepMinutes: ckMinutes(r.prepTime),
+    category: [].concat(r.recipeCategory || []).map(x => ckText(x)).filter(Boolean).slice(0, 3),
+    image: typeof r.image === 'string' ? r.image.slice(0, 300) : ckText([].concat(r.image || [])[0]?.url || '').slice(0, 300) || null,
+    perServing: (n.calories || n.proteinContent) ? {
+      kcal: ckNum(n.calories), protein: ckNum(n.proteinContent), carbs: ckNum(n.carbohydrateContent), fat: ckNum(n.fatContent),
+    } : null,
+  };
+  if (!data.name || !data.ingredients.length) return json({ ok: false, error: 'Das Rezept hat keine öffentliche Zutatenliste.' }, 422, cors);
+  const body = JSON.stringify({ ok: true, recipe: data });
+  if (cache) await cache.put(cacheKey, new Response(body, { headers: { 'content-type': 'application/json', 'Cache-Control': 'public, max-age=604800' } }));
+  return new Response(body, { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'X-Cache': 'MISS', ...cors } });
+}
+
 // ---------- Request-Handling ----------
 
 async function handleTask(name, payload, env) {
@@ -232,8 +319,9 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
     const off = url.pathname.match(/^\/off\/(search|product\/\d+)$/);
+    const ck = url.pathname === '/cookidoo';
     const m = url.pathname.match(/^\/ai\/([a-z-]+)$/);
-    if (!m && !off) return json({ ok: false, error: 'Nicht gefunden' }, 404, cors);
+    if (!m && !off && !ck) return json({ ok: false, error: 'Nicht gefunden' }, 404, cors);
 
     if (!env.APP_TOKEN) return json({ ok: false, error: 'Server nicht konfiguriert: APP_TOKEN fehlt.' }, 500, cors);
     const token = request.headers.get('X-App-Token') || '';
@@ -246,6 +334,15 @@ export default {
       const n = await bump(env, `off:${ip}:${Math.floor(Date.now() / 600000)}`, 700);
       if (n > 120) return json({ ok: false, error: 'Zu viele Suchanfragen – kurz warten.' }, 429, cors);
       return handleOff(request, off[1], cors, env);
+    }
+
+    // Cookidoo: öffentliche Rezeptdaten, eigenes Limit, keine KI-Anfrage
+    if (ck) {
+      if (request.method !== 'GET') return json({ ok: false, error: 'Methode' }, 405, cors);
+      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+      const n = await bump(env, `ck:${ip}:${Math.floor(Date.now() / 600000)}`, 700);
+      if (n > 60) return json({ ok: false, error: 'Zu viele Rezept-Abrufe – kurz warten.' }, 429, cors);
+      return handleCookidoo(request, cors);
     }
 
     if (!env.OPENAI_API_KEY) return json({ ok: false, error: 'Server nicht konfiguriert: OPENAI_API_KEY fehlt.' }, 500, cors);

@@ -40,7 +40,7 @@ npx wrangler deploy
 
 ## Endpunkte
 
-`POST /ai/food-text` · `POST /ai/food-image` · `POST /ai/recipe` · `POST /ai/web-recipes` · `POST /ai/pdf-plans` · `GET /ai/usage`
+`POST /ai/food-text` · `POST /ai/food-image` · `POST /ai/recipe` · `POST /ai/web-recipes` · `POST /ai/pdf-plans` · `POST /ai/coach` · `GET /ai/usage`
 
 Antwort: `{ ok: true, data, model, tokens, usage }` oder `{ ok: false, error }` mit HTTP-Status.
 
@@ -54,3 +54,12 @@ User-Agent, Wiederholung bei 429/5xx) und cachen die Antwort 6 h bzw. 24 h am Ed
 OpenAI-Key, nur das Zugangstoken; eigenes Limit 120 Aufrufe / 10 Min pro IP. Direkt aus dem Browser
 liefert Open Food Facts unter Last Antworten ohne CORS-Header („kein Internet“) – der Umweg hier ist stabiler.
 Ohne eingerichteten Server ruft die App Open Food Facts weiter direkt auf (mit Timeout und Wiederholung).
+
+### Cookidoo (seit 1.26.0)
+
+`GET /cookidoo?url=https://cookidoo.de/recipes/recipe/de-DE/r123456` holt die Seite und gibt die
+öffentlich ausgelieferten schema.org-Rezeptdaten zurück: Name, Zutatenliste, Portionsangabe, Zeiten,
+Kategorie, Bild-URL und die Nährwerte je Portion. **Die kostenpflichtigen Zubereitungsschritte werden
+nicht übernommen** – die App verlinkt aufs Originalrezept. Nur `https://cookidoo.<tld>`-Adressen,
+Antwort 7 Tage am Edge gecacht, eigenes Limit 60 Aufrufe / 10 Min pro IP, kein OpenAI-Key nötig.
+Aus dem Browser geht das nicht (CORS), deshalb der Umweg über den Worker.
